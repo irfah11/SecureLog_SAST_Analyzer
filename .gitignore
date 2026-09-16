@@ -1,0 +1,9 @@
+# Email / SMTP credentials
+/Notification/email_config.php
+
+# Environment secrets
+.env
+.env.*
+
+# Generated logs
+*.log

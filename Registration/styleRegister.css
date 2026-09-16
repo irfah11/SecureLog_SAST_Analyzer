@@ -1,0 +1,276 @@
+/* Custom CSS untuk SecureLog Registration */
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: #020817;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    color: white;
+}
+
+/* Center page */
+.container-fluid {
+    background: #020817;
+    padding: 25px;
+}
+
+/* Main Card */
+.registration-card {
+    width: 980px;
+    min-height: 580px;
+    background: #111827;
+    border: 1px solid rgba(96, 165, 250, 0.25);
+    border-radius: 10px;
+    box-shadow: 0 0 25px rgba(0, 0, 0, 0.45);
+}
+
+/* Left Panel */
+.info-panel {
+    flex: 1;
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(3, 7, 18, 0.15) 0%,
+            rgba(3, 7, 18, 0.55) 45%,
+            rgba(3, 7, 18, 0.95) 100%
+        ),
+        url('../Asset/backgroundlogin1.png');
+
+    /* IMPORTANT: this makes image smaller like first screenshot */
+    background-size: 100%;
+    background-repeat: no-repeat;
+    background-position: center 35px;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 42px 55px;
+    color: white;
+    border-right: 1px solid rgba(96, 165, 250, 0.22);
+}
+
+/* Text inside left panel */
+.brand-title {
+    color: white;
+    font-size: 2.7rem;
+    font-weight: 900;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    line-height: 1;
+    text-shadow: 2px 2px 0 #000;
+}
+
+.brand-subtitle {
+    color: #F2B705;
+    font-size: 2.3rem;
+    font-weight: 900;
+    margin-bottom: 25px;
+    line-height: 1.1;
+}
+
+.info-panel p {
+    color: #E5E7EB;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+/* Features */
+.feature-list {
+    margin-top: 18px;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 14px;
+    font-size: 0.9rem;
+    color: white;
+}
+
+.feature-item i {
+    width: 24px;
+    margin-right: 12px;
+    font-size: 0.95rem;
+}
+
+.feature-item:nth-child(1) i {
+    color: #3B82F6;
+}
+
+.feature-item:nth-child(2) i {
+    color: #06B6D4;
+}
+
+.feature-item:nth-child(3) i {
+    color: #8B5CF6;
+}
+
+/* Right Panel */
+.form-panel {
+    flex: 1.25;
+    background-color: #111827;
+    color: white;
+    padding: 42px 60px !important;
+}
+
+.form-panel h2 {
+    color: white !important;
+    font-size: 2.2rem;
+    font-weight: 800;
+}
+
+.form-subtitle {
+    color: #9CA3AF !important;
+    font-size: 0.95rem;
+}
+
+/* Input Group */
+.input-group {
+    height: 38px;
+    background: #1F2937;
+    border: 1px solid #374151 !important;
+    border-radius: 7px !important;
+    overflow: hidden;
+    margin-bottom: 14px !important;
+}
+
+.input-group:focus-within {
+    border-color: #2563EB !important;
+}
+
+.input-group-text {
+    background: #1F2937 !important;
+    color: #60A5FA !important;
+    border: none !important;
+    width: 45px;
+    justify-content: center;
+}
+
+.input-group-text i {
+    color: #60A5FA !important;
+    font-size: 0.95rem;
+}
+
+.form-control,
+.form-select,
+select.form-control {
+    background: #1F2937 !important;
+    color: white !important;
+    border: none !important;
+    font-size: 0.88rem;
+    height: 38px;
+}
+
+.form-control::placeholder {
+    color: #B6C7E3;
+}
+
+.form-control:focus,
+.form-select:focus {
+    background: #1F2937 !important;
+    color: white !important;
+    box-shadow: none !important;
+}
+
+select option {
+    background: #1F2937;
+    color: white;
+}
+
+/* Password note */
+.text-muted {
+    color: rgba(156, 163, 175, 0.35) !important;
+    font-size: 0.78rem;
+}
+
+/* Info Alert */
+.alert-info {
+    background: rgba(37, 99, 235, 0.22);
+    border: 1px solid rgba(37, 99, 235, 0.55);
+    color: white;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    padding: 14px 16px;
+}
+
+/* Button */
+.btn-primary {
+    background: linear-gradient(90deg, #2563EB, #06B6D4);
+    border: none;
+    font-weight: 800;
+    letter-spacing: 1px;
+    box-shadow: 0 0 20px rgba(37, 99, 235, 0.35);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.1);
+}
+
+/* Login link */
+.form-panel p {
+    color: #9CA3AF;
+}
+
+.form-panel a {
+    color: #0EA5E9;
+}
+
+/* Hide footer to match first design */
+footer {
+    display: none;
+}
+
+/* Smooth animation */
+* {
+    transition:
+        background-color 0.3s ease,
+        border-color 0.3s ease,
+        transform 0.3s ease;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .registration-card {
+          width: 920px;
+            min-height: 560px;
+            border-radius: 10px;
+            background: #111827;
+            border: 1px solid rgba(96, 165, 250, 0.25);
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.45);
+    }
+
+    .info-panel {
+        flex: 1;
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(3, 7, 18, 0.15) 0%,
+            rgba(3, 7, 18, 0.55) 45%,
+            rgba(3, 7, 18, 0.95) 100%
+        ),
+        url('../Asset/backgroundlogin1.png');
+
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center top;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 40px 52px;
+    color: white;
+    border-right: 1px solid rgba(96, 165, 250, 0.22);
+    }
+
+    .form-panel {
+         flex: 1.25;
+        background-color: #111827;
+        color: white;
+        padding: 38px 55px !important;
+    }
+
+    .form-panel h2 {
+        font-size: 1.8rem;
+    }
+}

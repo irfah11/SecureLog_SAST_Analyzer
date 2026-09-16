@@ -1,0 +1,153 @@
+body, html{
+    height:100%;
+    margin:0;
+    font-family:'Poppins',sans-serif;
+    background:#0B1120;
+}
+
+.login-wrapper{
+    height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+.login-box{
+    width:420px;
+    padding:40px;
+    background:#111827;
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:20px;
+
+    box-shadow:
+        0 20px 60px rgba(0,0,0,.5),
+        0 0 30px rgba(37,99,235,.15);
+}
+
+.login-icon{
+    text-align:center;
+    margin-bottom:20px;
+}
+
+.login-icon i{
+    font-size:48px;
+    color:#3B82F6;
+}
+
+.login-title{
+    text-align:center;
+    color:white;
+    font-size:2rem;
+    font-weight:700;
+    margin-bottom:5px;
+}
+
+.login-subtitle{
+    text-align:center;
+    color:#9CA3AF;
+    margin-bottom:35px;
+}
+
+.form-label{
+    color:#E5E7EB;
+    font-size:.9rem;
+}
+
+.input-group-custom{
+    display:flex;
+    align-items:center;
+
+    background:#1F2937;
+    border:1px solid #374151;
+
+    border-radius:12px;
+    padding:12px 15px;
+}
+
+.input-group-custom i{
+    color:#60A5FA;
+    margin-right:12px;
+}
+
+.input-group-custom input,
+.input-group-custom select{
+    width:100%;
+    background:transparent;
+    border:none;
+    outline:none;
+    color:white;
+}
+
+.input-group-custom input::placeholder{
+    color:#9CA3AF;
+}
+
+.form-select{
+    background:transparent !important;
+    border:none !important;
+    color:white !important;
+}
+
+.btn-login{
+    width:100%;
+    border:none;
+    border-radius:12px;
+
+    padding:14px;
+
+    color:white;
+    font-weight:700;
+
+    background:linear-gradient(
+        90deg,
+        #2563EB,
+        #06B6D4
+    );
+
+    box-shadow:
+        0 0 25px rgba(37,99,235,.3);
+
+    transition:.3s;
+}
+
+.btn-login:hover{
+    transform:translateY(-2px);
+}
+
+.register-link{
+    text-align:center;
+    margin-top:20px;
+}
+
+.register-link p{
+    color:#9CA3AF;
+}
+
+.register-link a{
+    color:#3B82F6;
+    text-decoration:none;
+    font-weight:600;
+}
+
+.forgot-link{
+    color:#60A5FA;
+    text-decoration:none;
+}
+
+.login-title{
+    color:#FFFFFF !important;
+    text-align:center;
+    font-size:2.5rem;
+    font-weight:800;
+    margin-bottom:10px;
+}
+
+.login-subtitle{
+    color:#9CA3AF;
+    text-align:center;
+    margin-bottom:35px;
+}
+
+.forgot-link{
+    color:#60A5FA !important;
+}
