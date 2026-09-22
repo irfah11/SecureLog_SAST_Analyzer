@@ -125,21 +125,8 @@ if ($requestedAction === 'export_log') {
     }
 }
 
-/* ============================================================
-   LOG ADMIN DASHBOARD VIEW
-   ============================================================ */
 
-if (
-    $current_uid > 0
-    && function_exists('log_activity')
-    && defined('LOG_ADMIN_VIEW')
-) {
-    log_activity(
-        LOG_ADMIN_VIEW,
-        $current_uid,
-        'Admin viewed dashboard'
-    );
-}
+
 
 /* ============================================================
    ROLE STATISTICS

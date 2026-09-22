@@ -36,22 +36,7 @@ $currentUserId = (int) (
     ?? 0
 );
 
-/*
-|--------------------------------------------------------------------------
-| Record that admin opened the Activity Log page
-|--------------------------------------------------------------------------
-*/
-if (
-    $currentUserId > 0
-    && function_exists('log_activity')
-    && defined('LOG_ADMIN_VIEW')
-) {
-    log_activity(
-        LOG_ADMIN_VIEW,
-        $currentUserId,
-        'Admin viewed activity log'
-    );
-}
+
 
 /* ============================================================
    PAGINATION

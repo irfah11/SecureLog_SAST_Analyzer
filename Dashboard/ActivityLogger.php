@@ -1,147 +1,690 @@
 <?php
 /**
- * SecureLog — activity_logger.php
+ * SecureLog - Centralized Security Activity Logger
+ *
+ * Active audit log architecture:
+ *
+ * Application Event
+ *      ↓
+ * ActivityLogger.php
+ *      ↓
+ * Structured JSON event
+ *      ↓
+ * Dashboard/logs/securelog_audit.txt
+ *
+ * IMPORTANT:
+ * - Active log is NOT encrypted here.
+ * - Encryption will be handled later by Secure Log Vault.
+ * - Never log passwords, tokens, encryption keys or source code.
  */
 
-// Guna if(!defined(...)) untuk mengelakkan ralat "Constant already defined"
-if (!defined('LOG_ENCRYPT_KEY')) {
-    // PASTIKAN INI ADALAH 64 CHAR HEX (Contoh: 64756... atau jana guna openssl rand -hex 32)
-    define('LOG_ENCRYPT_KEY', $_ENV['LOG_ENCRYPT_KEY'] ?? 'd8225547432f7543883a9a1306b98616'); 
+
+/* ============================================================
+   LOG STORAGE
+   ============================================================ */
+
+if (!defined('LOG_DIR')) {
+    define('LOG_DIR', __DIR__ . '/logs/');
 }
 
-if (!defined('LOG_CIPHER')) define('LOG_CIPHER', 'AES-256-CBC');
-if (!defined('LOG_DIR'))    define('LOG_DIR', __DIR__ . '/logs/');
-if (!defined('LOG_FILE'))   define('LOG_FILE', LOG_DIR . 'securelog_audit.txt');
+if (!defined('LOG_FILE')) {
+    define('LOG_FILE', LOG_DIR . 'securelog_audit.txt');
+}
 
-// Event type constants - Dibalut dengan check defined
+
+/* ============================================================
+   EVENT TYPES
+   ============================================================ */
+
+// Authentication
 if (!defined('LOG_LOGIN_SUCCESS')) {
-    define('LOG_LOGIN_SUCCESS',   'LOGIN_SUCCESS');
-    define('LOG_LOGIN_FAILED',    'LOGIN_FAILED');
-    define('LOG_LOGOUT',          'LOGOUT');
-    define('LOG_REGISTER',        'REGISTER');
-    define('LOG_SCAN_RUN',        'SCAN_RUN');
-    define('LOG_ROLE_CHANGED',    'ROLE_CHANGED');
-    define('LOG_USER_ADDED',      'USER_ADDED');
-    define('LOG_USER_DEACTIVATED','USER_DEACTIVATED');
-    define('LOG_ADMIN_VIEW',      'ADMIN_VIEW');
-    define('LOG_LOG_EXPORTED',    'LOG_EXPORTED');
+    define('LOG_LOGIN_SUCCESS', 'LOGIN_SUCCESS');
 }
 
-/**
- * Menulis log ke dalam fail
- */
-function log_activity(string $event_type, ?int $user_id, string $detail): void
-{
-    if (!is_dir(LOG_DIR)) {
-        mkdir(LOG_DIR, 0750, true);
-        file_put_contents(LOG_DIR . '.htaccess', "Deny from all\n");
-    }
-
-    $timestamp = date('Y-m-d H:i:s');
-    $ip        = $_SERVER['REMOTE_ADDR'] ?? 'CLI';
-    // Gunakan UserID selaras dengan database
-    $uid_str   = $user_id !== null ? (string)$user_id : 'SYSTEM';
-
-    $plain = implode(' | ', [$timestamp, $event_type, "UID:{$uid_str}", "IP:{$ip}", $detail]);
-
-    $iv_length = openssl_cipher_iv_length(LOG_CIPHER);
-    $iv        = openssl_random_pseudo_bytes($iv_length);
-
-    // Semakan hex sebelum hex2bin
-    if (!ctype_xdigit(LOG_ENCRYPT_KEY) || strlen(LOG_ENCRYPT_KEY) % 2 !== 0) {
-        error_log("SecureLog Error: LOG_ENCRYPT_KEY mestilah string hex genap.");
-        return;
-    }
-
-    $key_raw    = hex2bin(LOG_ENCRYPT_KEY);
-    $ciphertext = openssl_encrypt($plain, LOG_CIPHER, $key_raw, OPENSSL_RAW_DATA, $iv);
-
-    // Simpan sebagai hex supaya konsisten (menyelesaikan ralat hex2bin baris 110)
-    $encoded_line = bin2hex($iv . $ciphertext) . "\n";
-    file_put_contents(LOG_FILE, $encoded_line, FILE_APPEND | LOCK_EX);
+if (!defined('LOG_LOGIN_FAILED')) {
+    define('LOG_LOGIN_FAILED', 'LOGIN_FAILED');
 }
 
-/**
- * Membaca dan mendekripsi log
- */
-function read_logs(): array
-{
-    if (!file_exists(LOG_FILE)) {
-        return [];
-    }
-
-    if (!ctype_xdigit(LOG_ENCRYPT_KEY) || strlen(LOG_ENCRYPT_KEY) % 2 !== 0) {
-        return [];
-    }
-
-    $key_raw = hex2bin(LOG_ENCRYPT_KEY);
-    $lines   = file(LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    
-    if (!$lines) return [];
-
-    $decoded = [];
-    foreach (array_reverse($lines) as $line) {
-        // Pastikan baris adalah hex yang sah
-        if (!ctype_xdigit($line) || strlen($line) % 2 !== 0) {
-            continue;
-        }
-
-        $raw_data   = hex2bin($line);
-        $iv_len     = openssl_cipher_iv_length(LOG_CIPHER);
-        $iv         = substr($raw_data, 0, $iv_len);
-        $ciphertext = substr($raw_data, $iv_len);
-
-        $plain = openssl_decrypt($ciphertext, LOG_CIPHER, $key_raw, OPENSSL_RAW_DATA, $iv);
-
-        if ($plain) {
-            $decoded[] = $plain;
-        }
-    }
-    return $decoded;
+if (!defined('LOG_LOGOUT')) {
+    define('LOG_LOGOUT', 'LOGOUT');
 }
 
 
-/**
- * Parses a decrypted log line into an associative array.
- * Format: timestamp | event_type | UID:x | IP:x | UA:x | detail
- */
-function parse_log_line(string $line): array
-{
-    $parts = array_map('trim', explode(' | ', $line));
-    if (count($parts) < 6) {
-        return ['raw' => $line, 'valid' => false];
-    }
+// Access Control
+if (!defined('LOG_ACCESS_DENIED')) {
+    define('LOG_ACCESS_DENIED', 'ACCESS_DENIED');
+}
 
+
+// User Management
+if (!defined('LOG_USER_CREATED')) {
+    define('LOG_USER_CREATED', 'USER_CREATED');
+}
+
+if (!defined('LOG_USER_APPROVED')) {
+    define('LOG_USER_APPROVED', 'USER_APPROVED');
+}
+
+if (!defined('LOG_USER_DEACTIVATED')) {
+    define('LOG_USER_DEACTIVATED', 'USER_DEACTIVATED');
+}
+
+if (!defined('LOG_USER_DELETED')) {
+    define('LOG_USER_DELETED', 'USER_DELETED');
+}
+
+if (!defined('LOG_ROLE_CHANGED')) {
+    define('LOG_ROLE_CHANGED', 'ROLE_CHANGED');
+}
+
+
+// File / Scanner
+if (!defined('LOG_FILE_UPLOAD_COMPLETED')) {
+    define('LOG_FILE_UPLOAD_COMPLETED', 'FILE_UPLOAD_COMPLETED');
+}
+
+if (!defined('LOG_SCAN_STARTED')) {
+    define('LOG_SCAN_STARTED', 'SCAN_STARTED');
+}
+
+if (!defined('LOG_SCAN_COMPLETED')) {
+    define('LOG_SCAN_COMPLETED', 'SCAN_COMPLETED');
+}
+
+if (!defined('LOG_SCAN_FAILED')) {
+    define('LOG_SCAN_FAILED', 'SCAN_FAILED');
+}
+
+
+// Scanner Rules
+if (!defined('LOG_RULE_CREATED')) {
+    define('LOG_RULE_CREATED', 'RULE_CREATED');
+}
+
+if (!defined('LOG_RULE_UPDATED')) {
+    define('LOG_RULE_UPDATED', 'RULE_UPDATED');
+}
+
+if (!defined('LOG_RULE_ACTIVATED')) {
+    define('LOG_RULE_ACTIVATED', 'RULE_ACTIVATED');
+}
+
+if (!defined('LOG_RULE_DISABLED')) {
+    define('LOG_RULE_DISABLED', 'RULE_DISABLED');
+}
+
+
+// Secure Log Vault
+if (!defined('LOG_LOG_VIEWED')) {
+    define('LOG_LOG_VIEWED', 'LOG_VIEWED');
+}
+
+if (!defined('LOG_LOG_EXPORTED')) {
+    define('LOG_LOG_EXPORTED', 'LOG_EXPORTED');
+}
+
+if (!defined('LOG_INTEGRITY_CHECK_FAILED')) {
+    define('LOG_INTEGRITY_CHECK_FAILED', 'INTEGRITY_CHECK_FAILED');
+}
+
+
+/*
+ * Temporary compatibility constant.
+ *
+ * activityLog.php currently uses LOG_ADMIN_VIEW.
+ * We will remove this event when Activity Log UI is redesigned.
+ */
+if (!defined('LOG_ADMIN_VIEW')) {
+    define('LOG_ADMIN_VIEW', 'ADMIN_VIEW');
+}
+
+
+/* ============================================================
+   SECURITY CONFIGURATION
+   ============================================================ */
+
+/**
+ * Keys that must never be stored directly in audit logs.
+ */
+function securelog_sensitive_keys(): array
+{
     return [
-        'valid'      => true,
-        'timestamp'  => $parts[0],
-        'event_type' => $parts[1],
-        'user_id'    => ltrim($parts[2], 'UID:'),
-        'ip'         => ltrim($parts[3], 'IP:'),
-        'ua'         => ltrim($parts[4], 'UA:'),
-        'detail'     => $parts[5],
+        'password',
+        'passwd',
+        'pwd',
+
+        'token',
+        'access_token',
+        'refresh_token',
+
+        'session_id',
+        'sessionid',
+
+        'secret',
+        'api_key',
+        'apikey',
+
+        'encryption_key',
+        'private_key',
+
+        'smtp_password',
+        'database_password',
+        'db_password',
+
+        'authorization',
+        'cookie',
+
+        'source_code'
     ];
 }
 
-/**
- * Exports the RAW encrypted log file as a download.
- * Only call this from an admin-protected page.
- */
-function export_encrypted_log(): void
-{
-    if (!file_exists(LOG_FILE)) {
-        http_response_code(404);
-        exit("No log file found.");
-    }
 
-    $filename = 'securelog_audit_' . date('Ymd_His') . '.txt';
-    header('Content-Type: text/plain');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Content-Length: ' . filesize(LOG_FILE));
-    header('Cache-Control: no-store');
-    readfile(LOG_FILE);
-    exit();
+/* ============================================================
+   HELPER: SANITIZE STRING
+   ============================================================ */
+
+/**
+ * Removes characters that could make log entries confusing
+ * or facilitate log injection.
+ */
+function securelog_sanitize_string(string $value): string
+{
+    // Remove null bytes.
+    $value = str_replace("\0", '', $value);
+
+    // Prevent CR/LF based log forging.
+    $value = str_replace(
+        ["\r", "\n"],
+        ['\\r', '\\n'],
+        $value
+    );
+
+    return trim($value);
 }
 
 
+/* ============================================================
+   HELPER: SANITIZE CONTEXT
+   ============================================================ */
 
+/**
+ * Recursively sanitizes contextual information and redacts
+ * known sensitive fields.
+ */
+function securelog_sanitize_context(array $data): array
+{
+    $sensitiveKeys = securelog_sensitive_keys();
+
+    $clean = [];
+
+    foreach ($data as $key => $value) {
+
+        $normalizedKey = strtolower((string) $key);
+
+        /*
+         * Never write sensitive values.
+         */
+        if (in_array($normalizedKey, $sensitiveKeys, true)) {
+            $clean[$key] = '[REDACTED]';
+            continue;
+        }
+
+        /*
+         * Nested context.
+         */
+        if (is_array($value)) {
+            $clean[$key] = securelog_sanitize_context($value);
+            continue;
+        }
+
+        /*
+         * Strings.
+         */
+        if (is_string($value)) {
+            $clean[$key] = securelog_sanitize_string($value);
+            continue;
+        }
+
+        /*
+         * Keep safe primitive types.
+         */
+        if (
+            is_int($value)
+            || is_float($value)
+            || is_bool($value)
+            || $value === null
+        ) {
+            $clean[$key] = $value;
+            continue;
+        }
+
+        /*
+         * Unexpected objects/resources should not be logged.
+         */
+        $clean[$key] = '[UNSUPPORTED_VALUE]';
+    }
+
+    return $clean;
+}
+
+
+/* ============================================================
+   HELPER: EVENT ID
+   ============================================================ */
+
+function securelog_generate_event_id(): string
+{
+    try {
+        return 'EVT-' . strtoupper(bin2hex(random_bytes(8)));
+    } catch (Throwable $e) {
+        /*
+         * Logging must never crash the main application.
+         */
+        return 'EVT-' . strtoupper(uniqid());
+    }
+}
+
+
+/* ============================================================
+   HELPER: ACTOR INFORMATION
+   ============================================================ */
+
+function securelog_get_actor(?int $userId, array $context): array
+{
+    /*
+     * Context has priority.
+     *
+     * This is important for LOGIN_FAILED because the user
+     * may not have a valid authenticated session yet.
+     */
+
+    $username =
+        $context['actor_username']
+        ?? $_SESSION['username']
+        ?? null;
+
+    $role =
+        $context['actor_role']
+        ?? $_SESSION['role']
+        ?? null;
+
+    return [
+        'user_id' => $userId,
+        'username' => $username !== null
+            ? securelog_sanitize_string((string) $username)
+            : null,
+
+        'role' => $role !== null
+            ? securelog_sanitize_string((string) $role)
+            : null
+    ];
+}
+
+
+/* ============================================================
+   HELPER: REQUEST SOURCE
+   ============================================================ */
+
+function securelog_get_source(): array
+{
+    return [
+        'ip' => securelog_sanitize_string(
+            $_SERVER['REMOTE_ADDR'] ?? 'CLI'
+        ),
+
+        'request_uri' => securelog_sanitize_string(
+            $_SERVER['REQUEST_URI'] ?? 'CLI'
+        ),
+
+        'http_method' => securelog_sanitize_string(
+            $_SERVER['REQUEST_METHOD'] ?? 'CLI'
+        )
+    ];
+}
+
+
+/* ============================================================
+   MAIN LOGGING FUNCTION
+   ============================================================ */
+
+/**
+ * Writes one structured security event.
+ *
+ * Existing 3-parameter calls remain supported:
+ *
+ * log_activity(
+ *     LOG_LOGIN_SUCCESS,
+ *     $userId,
+ *     'User successfully authenticated.'
+ * );
+ *
+ * New contextual logging:
+ *
+ * log_activity(
+ *     LOG_LOGIN_SUCCESS,
+ *     $userId,
+ *     'Developer successfully authenticated.',
+ *     [
+ *         'module'   => 'Authentication',
+ *         'severity' => 'INFO',
+ *         'result'   => 'SUCCESS'
+ *     ]
+ * );
+ */
+function log_activity(
+    string $eventType,
+    ?int $userId,
+    string $description,
+    array $context = []
+): bool {
+
+    try {
+
+        /* --------------------------------------------------------
+           Ensure log directory exists
+           -------------------------------------------------------- */
+
+        if (!is_dir(LOG_DIR)) {
+
+            if (!mkdir(LOG_DIR, 0750, true) && !is_dir(LOG_DIR)) {
+                error_log(
+                    'SecureLog: Unable to create audit log directory.'
+                );
+
+                return false;
+            }
+        }
+
+
+        /* --------------------------------------------------------
+           Protect log directory from direct web access
+           -------------------------------------------------------- */
+
+        $htaccessFile = LOG_DIR . '.htaccess';
+
+        if (!file_exists($htaccessFile)) {
+
+            $htaccessContent =
+                "Require all denied\n"
+                . "Deny from all\n";
+
+            @file_put_contents(
+                $htaccessFile,
+                $htaccessContent,
+                LOCK_EX
+            );
+        }
+
+
+        /* --------------------------------------------------------
+           Normalize supplied context
+           -------------------------------------------------------- */
+
+        $context = securelog_sanitize_context($context);
+
+
+        /* --------------------------------------------------------
+           Determine event attributes
+           -------------------------------------------------------- */
+
+        $module = $context['module'] ?? 'System';
+
+        $severity = strtoupper(
+            (string) ($context['severity'] ?? 'INFO')
+        );
+
+        $allowedSeverities = [
+            'INFO',
+            'WARNING',
+            'ERROR',
+            'CRITICAL'
+        ];
+
+        if (!in_array($severity, $allowedSeverities, true)) {
+            $severity = 'INFO';
+        }
+
+
+        $result = strtoupper(
+            (string) ($context['result'] ?? 'SUCCESS')
+        );
+
+        $allowedResults = [
+            'SUCCESS',
+            'FAILURE',
+            'DENIED'
+        ];
+
+        if (!in_array($result, $allowedResults, true)) {
+            $result = 'SUCCESS';
+        }
+
+
+        /* --------------------------------------------------------
+           Build target
+           -------------------------------------------------------- */
+
+        $target = null;
+
+        if (
+            isset($context['target_type'])
+            || isset($context['target_id'])
+        ) {
+            $target = [
+                'type' => $context['target_type'] ?? null,
+                'id'   => $context['target_id'] ?? null
+            ];
+        }
+
+
+        /* --------------------------------------------------------
+           Build structured event
+           -------------------------------------------------------- */
+
+        $event = [
+
+            /*
+             * Identification
+             */
+            'event_id' => securelog_generate_event_id(),
+
+            /*
+             * WHEN
+             */
+            'timestamp' => (new DateTimeImmutable(
+                'now',
+                new DateTimeZone('Asia/Kuala_Lumpur')
+            ))->format(DATE_ATOM),
+
+            /*
+             * WHERE
+             */
+            'application' => 'SecureLog',
+            'module' => securelog_sanitize_string(
+                (string) $module
+            ),
+
+            /*
+             * WHAT
+             */
+            'event' => securelog_sanitize_string(
+                strtoupper($eventType)
+            ),
+
+            'severity' => $severity,
+
+            /*
+             * WHO
+             */
+            'actor' => securelog_get_actor(
+                $userId,
+                $context
+            ),
+
+            /*
+             * REQUEST SOURCE
+             */
+            'source' => securelog_get_source(),
+
+            /*
+             * OBJECT AFFECTED
+             */
+            'target' => $target,
+
+            /*
+             * RESULT
+             */
+            'result' => $result,
+
+            /*
+             * HUMAN-READABLE EXPLANATION
+             */
+            'description' => securelog_sanitize_string(
+                $description
+            )
+        ];
+
+
+        /* --------------------------------------------------------
+           Optional safe metadata
+           -------------------------------------------------------- */
+
+        if (
+            isset($context['metadata'])
+            && is_array($context['metadata'])
+        ) {
+            $event['metadata'] =
+                securelog_sanitize_context(
+                    $context['metadata']
+                );
+        }
+
+
+        /* --------------------------------------------------------
+           Convert to JSON
+           -------------------------------------------------------- */
+
+        $json = json_encode(
+            $event,
+            JSON_UNESCAPED_SLASHES
+            | JSON_UNESCAPED_UNICODE
+        );
+
+        if ($json === false) {
+
+            error_log(
+                'SecureLog: Failed to encode audit event.'
+            );
+
+            return false;
+        }
+
+
+        /* --------------------------------------------------------
+           Append one JSON object per line
+           -------------------------------------------------------- */
+
+        $written = file_put_contents(
+            LOG_FILE,
+            $json . PHP_EOL,
+            FILE_APPEND | LOCK_EX
+        );
+
+        if ($written === false) {
+
+            error_log(
+                'SecureLog: Failed to write audit event.'
+            );
+
+            return false;
+        }
+
+        return true;
+
+    } catch (Throwable $e) {
+
+        /*
+         * Security logging failure must not crash the main
+         * SecureLog application.
+         */
+
+        error_log(
+            'SecureLog Activity Logger Error: '
+            . $e->getMessage()
+        );
+
+        return false;
+    }
+}
+
+
+/* ============================================================
+   READ ACTIVE LOG
+   ============================================================ */
+
+/**
+ * Reads structured active audit events.
+ *
+ * Newest event will appear first.
+ */
+function read_logs(?int $limit = null): array
+{
+    if (!file_exists(LOG_FILE)) {
+        return [];
+    }
+
+    $lines = file(
+        LOG_FILE,
+        FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES
+    );
+
+    if ($lines === false) {
+        return [];
+    }
+
+    $events = [];
+
+    foreach (array_reverse($lines) as $line) {
+
+        $event = parse_log_line($line);
+
+        if ($event === null) {
+            continue;
+        }
+
+        $events[] = $event;
+
+        if (
+            $limit !== null
+            && count($events) >= $limit
+        ) {
+            break;
+        }
+    }
+
+    return $events;
+}
+
+
+/* ============================================================
+   PARSE STRUCTURED LOG LINE
+   ============================================================ */
+
+function parse_log_line(string $line): ?array
+{
+    $event = json_decode($line, true);
+
+    if (!is_array($event)) {
+        return null;
+    }
+
+    if (
+        empty($event['event_id'])
+        || empty($event['timestamp'])
+        || empty($event['event'])
+    ) {
+        return null;
+    }
+
+    return $event;
+}
