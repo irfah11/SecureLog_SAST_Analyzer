@@ -719,44 +719,42 @@ if (
 
                 /*
                 |--------------------------------------------------------------------------
-                | Activity log
+                | Activity Log - USER_CREATED
                 |--------------------------------------------------------------------------
                 |
-                | NEVER log the temporary password.
+                | The database transaction has already been committed.
+                | Therefore the account definitely exists before we record SUCCESS.
+                |
+                | IMPORTANT:
+                | Never store the temporary password in the activity log.
                 |--------------------------------------------------------------------------
                 */
 
                 if (
-                    function_exists(
-                        'log_activity'
-                    )
+                    $currentUserId > 0
+                    && function_exists('log_activity')
                 ) {
-
-                    $action =
-                        defined('LOG_USER_ADDED')
-                        ? LOG_USER_ADDED
-                        : 'USER_ADDED';
-
-                    /*
-                     * SecureLog ActivityLogger convention:
-                     * log_activity(UserID, Action, Description)
-                     */
-                if (
-                    function_exists('log_activity')
-                ) {
-
-                    $action =
-                        defined('LOG_USER_ADDED')
-                        ? LOG_USER_ADDED
-                        : 'USER_ADDED';
-
                     log_activity(
-                        $action,
+                        LOG_USER_CREATED,
                         $currentUserId,
-                        "Admin created developer account: {$username} (UserID {$newUserId})"
+                        'Administrator created a new developer account.',
+                        [
+                            'module' => 'UserManagement',
+                            'severity' => 'INFO',
+                            'result' => 'SUCCESS',
+
+                            'target_type' => 'USER_ACCOUNT',
+                            'target_id' => $newUserId,
+
+                            'metadata' => [
+                                'created_role' => 'developer',
+                                'account_status' => 'APPROVED',
+                                'must_change_password' => true
+                            ]
+                        ]
                     );
-                    }
                 }
+
 
                 /*
                 |--------------------------------------------------------------------------

@@ -1,61 +1,183 @@
 <?php
 /**
- * SecureLog — auth_check.php
- * Include at the TOP of every protected page.
+ * SecureLog — authCheck.php
  *
-*  Usage:
-*   require_once 'auth_check.php';
- *   require_role(['admin']);           // admin only
- *   require_role(['developer','guest']); // both scanner users
+ * Centralized authentication and authorization guard.
+ *
+ * Usage:
+ *
+ * require_once __DIR__ . '/authCheck.php';
+ * require_role(['admin']);
+ *
+ * or:
+ *
+ * require_role(['developer']);
  */
 
+
+/* ============================================================
+   SESSION
+   ============================================================ */
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+
+/* ============================================================
+   ACTIVITY LOGGER
+   ============================================================ */
+
+require_once __DIR__ . '/ActivityLogger.php';
+
+
+/* ============================================================
+   REQUIRE AUTHENTICATED USER
+   ============================================================ */
+
 /**
- * Redirects to login if user is not authenticated.
+ * Redirect user to login page when no authenticated
+ * SecureLog session exists.
  */
 function require_login(): void
 {
-    if (empty($_SESSION['user_id'])) {
-        header("Location: ../Registration/login.php?error=session_expired");
+    /*
+     * Support both session keys temporarily while the project
+     * is being standardized.
+     */
+    $userId =
+        $_SESSION['UserID']
+        ?? $_SESSION['user_id']
+        ?? null;
+
+    if (empty($userId)) {
+
+        header(
+            "Location: /FinalYearProject/Registration/login.php"
+            . "?error=session_expired"
+        );
+
         exit();
     }
 }
 
+
+/* ============================================================
+   REQUIRE AUTHORIZED ROLE
+   ============================================================ */
+
 /**
- * Checks role after require_login().
- * @param string[] $allowed Array of allowed roles, e.g. ['admin'], ['developer','guest']
+ * Check whether the authenticated user's role is allowed
+ * to access the current resource.
+ *
+ * Example:
+ *
+ * require_role(['admin']);
+ *
+ * require_role(['developer']);
+ *
+ * @param string[] $allowed
  */
 function require_role(array $allowed): void
 {
+    /*
+     * Authentication must happen first.
+     */
     require_login();
 
-    if (!in_array($_SESSION['role'] ?? '', $allowed, true)) {
 
-    http_response_code(403);
+    /* --------------------------------------------------------
+       Current authenticated identity
+       -------------------------------------------------------- */
 
-    die("
-    <h1>403 - Access Denied</h1>
-    <p>You do not have permission to access this page.</p>
-    ");
+    $userId = isset($_SESSION['UserID'])
+        ? (int) $_SESSION['UserID']
+        : (int) ($_SESSION['user_id'] ?? 0);
 
+    $username =
+        $_SESSION['username']
+        ?? null;
+
+    $currentRole =
+        $_SESSION['role']
+        ?? '';
+
+
+    /* --------------------------------------------------------
+       Authorization check
+       -------------------------------------------------------- */
+
+    if (!in_array($currentRole, $allowed, true)) {
+
+        /*
+         * IMPORTANT:
+         *
+         * This user is already authenticated.
+         * Therefore UserID, username and role represent the
+         * verified actor.
+         */
+
+        log_activity(
+            LOG_ACCESS_DENIED,
+            $userId > 0 ? $userId : null,
+            'Authenticated user attempted to access a resource without the required role.',
+            [
+                'module' => 'AccessControl',
+
+                'severity' => 'WARNING',
+
+                'result' => 'DENIED',
+
+                'actor_username' => $username,
+
+                'actor_role' => $currentRole,
+
+                'target_type' => 'PROTECTED_RESOURCE',
+
+                /*
+                 * The requested resource is useful for
+                 * security investigation.
+                 */
+                'target_id' =>
+                    $_SERVER['REQUEST_URI']
+                    ?? null,
+
+                'metadata' => [
+                    'required_roles' =>
+                        array_values($allowed)
+                ]
+            ]
+        );
+
+
+        /* ----------------------------------------------------
+           Return HTTP 403
+           ---------------------------------------------------- */
+
+        http_response_code(403);
+
+        die("
+            <h1>403 - Access Denied</h1>
+            <p>You do not have permission to access this page.</p>
+        ");
+    }
 }
-}
 
-/**
- * Helper: returns current user role.
- */
+
+/* ============================================================
+   CURRENT ROLE
+   ============================================================ */
+
 function current_role(): string
 {
-    return $_SESSION['role'] ?? 'guest';
+    return $_SESSION['role'] ?? '';
 }
 
-/**
- * Helper: returns true if user is admin.
- */
+
+/* ============================================================
+   ADMIN CHECK
+   ============================================================ */
+
 function is_admin(): bool
 {
     return ($_SESSION['role'] ?? '') === 'admin';

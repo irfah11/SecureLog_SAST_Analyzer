@@ -4,33 +4,35 @@
  * File: Dashboard/ManageUser/editUser.php
  */
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 
 /* ============================================================
    AUTHENTICATION
    ============================================================ */
 
-require_once __DIR__ . '/../authCheck.php';
+require_once __DIR__ . '/../Dashboard/authCheck.php';
 
-if (function_exists('require_role')) {
-    require_role(['admin']);
-}
+/*
+ * authCheck.php already starts the session when required
+ * and loads ActivityLogger.php.
+ */
+require_role(['admin']);
+
 
 /* ============================================================
-   DATABASE AND ACTIVITY LOGGER
+   DATABASE
    ============================================================ */
 
-require_once __DIR__ . '/../../Engine_Process/connection.php';
-require_once __DIR__ . '/../ActivityLogger.php';
+require_once __DIR__ . '/../Engine_Process/connection.php';
 
-/* Make sure database connection exists */
 if (!isset($conn) || !($conn instanceof mysqli)) {
     die('Database connection is not available.');
 }
 
-/* Support both possible session variable names */
+
+/* ============================================================
+   CURRENT ADMIN
+   ============================================================ */
+
 $currentAdminId = (int) (
     $_SESSION['UserID']
     ?? $_SESSION['user_id']
@@ -271,23 +273,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (
                 $currentAdminId > 0
                 && function_exists('log_activity')
-                && defined('LOG_ROLE_CHANGED')
             ) {
-                log_activity(
-                    LOG_ROLE_CHANGED,
-                    $currentAdminId,
-                    "User ID {$selectedUserId} was {$statusLabel}"
-                );
+
+                if ($newStatus === 1) {
+
+                    log_activity(
+                        LOG_USER_APPROVED,
+                        $currentAdminId,
+                        'Administrator approved a developer account.',
+                        [
+                            'module' => 'UserManagement',
+                            'severity' => 'INFO',
+                            'result' => 'SUCCESS',
+
+                            'target_type' => 'USER_ACCOUNT',
+                            'target_id' => $selectedUserId,
+
+                            'metadata' => [
+                                'new_status' => 'APPROVED'
+                            ]
+                        ]
+                    );
+
+                } else {
+
+                    log_activity(
+                        LOG_USER_DEACTIVATED,
+                        $currentAdminId,
+                        'Administrator set a user account as pending.',
+                        [
+                            'module' => 'UserManagement',
+                            'severity' => 'WARNING',
+                            'result' => 'SUCCESS',
+
+                            'target_type' => 'USER_ACCOUNT',
+                            'target_id' => $selectedUserId,
+
+                            'metadata' => [
+                                'new_status' => 'PENDING'
+                            ]
+                        ]
+                    );
+                }
             }
 
-            $statusStatement->close();
+    $statusStatement->close();
 
-            redirectEditUser(
-                $selectedUserId,
-                'success',
-                "User account successfully {$statusLabel}."
-            );
-        }
+    redirectEditUser(
+        $selectedUserId,
+        'success',
+        "User account successfully {$statusLabel}."
+    );
+}
 
         $databaseError = $statusStatement->error;
 
@@ -1323,7 +1360,7 @@ if (
 
     <!-- Existing admin sidebar -->
     <?php
-    require __DIR__ . '/../../Sidebar/sidebaradmin.php';
+    require __DIR__ . '/../Sidebar/sidebaradmin.php';
     ?>
 
     <main class="admin-page-content edit-user-page">

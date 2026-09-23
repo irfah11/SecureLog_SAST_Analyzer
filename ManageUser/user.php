@@ -312,7 +312,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             /*
             |--------------------------------------------------------------------------
-            | Send Approval Email
+            | Activity Log - User Status
+            |--------------------------------------------------------------------------
+            |
+            | Database transaction has already been committed.
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                $currentAdminId > 0
+                && function_exists('log_activity')
+            ) {
+
+                if ($newStatus === 1) {
+
+                    log_activity(
+                        LOG_USER_APPROVED,
+                        $currentAdminId,
+                        'Administrator approved a developer account.',
+                        [
+                            'module' => 'UserManagement',
+                            'severity' => 'INFO',
+                            'result' => 'SUCCESS',
+
+                            'target_type' => 'USER_ACCOUNT',
+                            'target_id' => $targetUserId,
+
+                            'metadata' => [
+                                'new_status' => 'APPROVED'
+                            ]
+                        ]
+                    );
+
+                } else {
+
+                    log_activity(
+                        LOG_USER_DEACTIVATED,
+                        $currentAdminId,
+                        'Administrator set a user account as pending.',
+                        [
+                            'module' => 'UserManagement',
+                            'severity' => 'WARNING',
+                            'result' => 'SUCCESS',
+
+                            'target_type' => 'USER_ACCOUNT',
+                            'target_id' => $targetUserId,
+
+                            'metadata' => [
+                                'new_status' => 'PENDING'
+                            ]
+                        ]
+                    );
+                }
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Approval Email
+            |--------------------------------------------------------------------------
+            |
+            | Email is attempted AFTER database commit and audit logging.
+            | Email failure does not undo account approval.
             |--------------------------------------------------------------------------
             */
 
@@ -322,101 +383,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $newStatus === 1
                 && strtolower($targetUser['role']) === 'developer'
             ) {
-
                 $emailSent = sendApprovalNotification(
                     $targetUser['email'],
                     $targetUser['fullname']
                 );
             }
 
-            if (
-                $newStatus === 1
-                && strtolower($targetUser['role']) === 'developer'
-            ) {
-
-                $emailSent = sendApprovalNotification(
-                    $targetUser['email'],
-                    $targetUser['fullname']
-                );
-
-                if (
-                    $currentAdminId > 0
-                    && function_exists('log_activity')
-                ) {
-
-                    if ($emailSent) {
-
-                        log_activity(
-                            'EMAIL_NOTIFICATION_SENT',
-                            $currentAdminId,
-                            "Approval email sent to User ID {$targetUserId}"
-                        );
-
-                    } else {
-
-                        log_activity(
-                            'EMAIL_NOTIFICATION_FAILED',
-                            $currentAdminId,
-                            "Approval email failed for User ID {$targetUserId}"
-                        );
-                    }
-                }
-            }
+            
 
 
-            /*
-            |--------------------------------------------------------------------------
-            | Activity Log
-            |--------------------------------------------------------------------------
-            */
-
-            $statusLabel =
-                $newStatus === 1
-                    ? 'approved'
-                    : 'set to pending';
-
-            if (
-                $currentAdminId > 0
-                && function_exists('log_activity')
-            ) {
-
-                /*
-                * For now we keep your existing logger.
-                *
-                * Later I recommend creating:
-                * LOG_USER_APPROVED
-                * LOG_USER_PENDING
-                */
-
-                if (defined('LOG_USER_DEACTIVATED')) {
-
-                    log_activity(
-                        LOG_USER_DEACTIVATED,
-                        $currentAdminId,
-                        "User ID {$targetUserId} was {$statusLabel}"
-                    );
-                }
-            }
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | EMAIL NOTIFICATION WILL GO HERE LATER
-            |--------------------------------------------------------------------------
-            |
-            | IMPORTANT:
-            | Email runs AFTER database commit.
-            |
-            | Example later:
-            |
-            | if ($newStatus === 1) {
-            |     sendApprovalNotification(
-            |         $targetUser['email'],
-            |         $targetUser['fullname']
-            |     );
-            | }
-            |
-            */
 
 
             if ($newStatus === 1) {
