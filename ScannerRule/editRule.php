@@ -706,31 +706,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $updateStatement->close();
 
-                /* Activity Log */
+             /* ========================================================
+                ACTIVITY LOG - RULE UPDATED
+                ======================================================== */
 
                 if (
                     $currentAdminId > 0
-                    && function_exists(
-                        'log_activity'
-                    )
+                    && function_exists('log_activity')
                 ) {
 
-                    $logType =
-                        defined(
-                            'LOG_SCANNER_RULE_UPDATED'
-                        )
-                            ? LOG_SCANNER_RULE_UPDATED
-                            : 'SCANNER_RULE_UPDATED';
-
-                    $statusMessage =
-                        $logicChanged
-                            ? ' Detection logic changed; status reset to DRAFT.'
-                            : '';
-
                     log_activity(
-                        $logType,
+                        LOG_RULE_UPDATED,
                         $currentAdminId,
-                        "Updated scanner rule {$ruleCode}.{$statusMessage}"
+                        'Administrator updated a scanner rule.',
+                        [
+                            'module' => 'ScannerRule',
+                            'severity' => 'INFO',
+                            'result' => 'SUCCESS',
+
+                            'target_type' => 'SCANNER_RULE',
+                            'target_id' => $ruleId,
+
+                            'metadata' => [
+                                'rule_code' => $ruleCode,
+                                'rule_name' => $ruleName,
+                                'language' => $language,
+                                'detection_type' => $detectionType,
+                                'match_type' => $matchType,
+                                'severity' => $severity,
+
+                                'logic_changed' => $logicChanged,
+
+                                'previous_status' => $originalStatus,
+                                'new_status' => $newStatus,
+
+                                'retest_required' => $logicChanged
+                            ]
+                        ]
                     );
                 }
 

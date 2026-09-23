@@ -576,28 +576,39 @@ if (empty($errors)) {
 
             $insertStatement->close();
 
-            /* Activity Log */
+           /* ========================================================
+                ACTIVITY LOG - RULE CREATED
+                ======================================================== */
 
-            if (
-                $currentAdminId > 0
-                && function_exists(
-                    'log_activity'
-                )
-            ) {
+                if (
+                    $currentAdminId > 0
+                    && function_exists('log_activity')
+                ) {
 
-                $logType =
-                    defined(
-                        'LOG_SCANNER_RULE_CREATED'
-                    )
-                        ? LOG_SCANNER_RULE_CREATED
-                        : 'SCANNER_RULE_CREATED';
+                    log_activity(
+                        LOG_RULE_CREATED,
+                        $currentAdminId,
+                        'Administrator created a new scanner rule.',
+                        [
+                            'module' => 'ScannerRule',
+                            'severity' => 'INFO',
+                            'result' => 'SUCCESS',
 
-                log_activity(
-                    $logType,
-                    $currentAdminId,
-                    "Created draft scanner rule {$ruleCode}: {$ruleName}"
-                );
-            }
+                            'target_type' => 'SCANNER_RULE',
+                            'target_id' => $newRuleId,
+
+                            'metadata' => [
+                                'rule_code' => $ruleCode,
+                                'rule_name' => $ruleName,
+                                'language' => $language,
+                                'detection_type' => $detectionType,
+                                'match_type' => $matchType,
+                                'severity' => $severity,
+                                'status' => 'DRAFT'
+                            ]
+                        ]
+                    );
+                }
 
             /*
              * For now go back to scanner rule list.

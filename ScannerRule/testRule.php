@@ -580,33 +580,46 @@ if (
                     $testUpdateStatement->close();
                 }
 
-            /* ============================================
-               ACTIVITY LOG
-               ============================================ */
+           /* ============================================
+            ACTIVITY LOG - RULE TESTED
+            ============================================ */
 
             if (
                 $currentAdminId > 0
-                && function_exists(
-                    'log_activity'
-                )
+                && function_exists('log_activity')
             ) {
 
-                $logType =
-                    defined(
-                        'LOG_SCANNER_RULE_TESTED'
-                    )
-                        ? LOG_SCANNER_RULE_TESTED
-                        : 'SCANNER_RULE_TESTED';
-
-                $testStatus =
-                    $testPassed
-                        ? 'MATCH'
-                        : 'NO_MATCH';
-
                 log_activity(
-                    $logType,
+                    LOG_RULE_TESTED,
                     $currentAdminId,
-                    "Tested scanner rule {$ruleCode}; result={$testStatus}"
+                    'Administrator tested a scanner rule.',
+                    [
+                        'module' => 'ScannerRule',
+                        'severity' => 'INFO',
+
+                        'result' =>
+                            $testPassed
+                                ? 'SUCCESS'
+                                : 'FAILURE',
+
+                        'target_type' => 'SCANNER_RULE',
+                        'target_id' => $ruleId,
+
+                        'metadata' => [
+                            'rule_code' => $ruleCode,
+                            'rule_name' => $ruleName,
+                            'language' => $language,
+                            'match_type' => $matchType,
+
+                            'test_result' =>
+                                $testPassed
+                                    ? 'MATCH'
+                                    : 'NO_MATCH',
+
+                            'test_passed' =>
+                                $testPassed
+                        ]
+                    ]
                 );
             }
         }

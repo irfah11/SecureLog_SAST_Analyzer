@@ -497,6 +497,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "This account cannot be removed because it has {$scanCount} related scan record(s). Set the account as pending instead."
             );
         }
+                    /*
+            * Preserve minimal identity information before deletion.
+            * After DELETE succeeds, this user will no longer exist
+            * in the users table.
+            */
+            $deletedUsername = $selectedUser['username'] ?? 'Unknown';
 
         $deleteStatement = $conn->prepare(
             'DELETE FROM users
@@ -516,31 +522,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'i',
             $selectedUserId
         );
+            if ($deleteStatement->execute()) {
 
-        if ($deleteStatement->execute()) {
+                if (
+                    $currentAdminId > 0
+                    && function_exists('log_activity')
+                ) {
+                    log_activity(
+                        LOG_USER_DELETED,
+                        $currentAdminId,
+                        'Administrator permanently removed a user account.',
+                        [
+                            'module' => 'UserManagement',
+                            'severity' => 'WARNING',
+                            'result' => 'SUCCESS',
 
-            if (
-                $currentAdminId > 0
-                && function_exists('log_activity')
-                && defined('LOG_USER_DEACTIVATED')
-            ) {
-                log_activity(
-                    LOG_USER_DEACTIVATED,
-                    $currentAdminId,
-                    "Permanently removed user ID {$selectedUserId}"
-                );
+                            'target_type' => 'USER_ACCOUNT',
+                            'target_id' => $selectedUserId,
+
+                            'metadata' => [
+                                'deleted_username' => $deletedUsername
+                            ]
+                        ]
+                    );
+                }
+
+                $deleteStatement->close();
+
+                $query = http_build_query([
+                    'type' => 'success',
+                    'message' => 'User account permanently removed.'
+                ]);
+
+                header("Location: user.php?{$query}");
+                exit();
             }
-
-            $deleteStatement->close();
-
-            $query = http_build_query([
-                'type' => 'success',
-                'message' => 'User account permanently removed.'
-            ]);
-
-            header("Location: user.php?{$query}");
-            exit();
-        }
 
         $deleteError = $deleteStatement->error;
 

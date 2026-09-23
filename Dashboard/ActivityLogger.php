@@ -113,6 +113,9 @@ if (!defined('LOG_RULE_DISABLED')) {
     define('LOG_RULE_DISABLED', 'RULE_DISABLED');
 }
 
+if (!defined('LOG_RULE_TESTED')) {
+    define('LOG_RULE_TESTED', 'RULE_TESTED');
+}
 
 // Secure Log Vault
 if (!defined('LOG_LOG_VIEWED')) {

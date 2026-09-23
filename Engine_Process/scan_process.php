@@ -24,6 +24,7 @@
 session_start();
 
 require_once __DIR__ . '/connection.php';
+require_once __DIR__ . '/../Dashboard/ActivityLogger.php';
 
 
 /*
@@ -874,10 +875,31 @@ $expectedExtensions =
 $displayLanguage =
     $languageConfiguration[$language]['display_name'];
 
-
 /*
 |--------------------------------------------------------------------------
 | PROCESS FILES
+|--------------------------------------------------------------------------
+|
+| Operational counters are kept separately from security findings.
+|
+| IMPORTANT:
+| A finding with Status = FAIL means a security check failed.
+| It does NOT mean that the scanner itself failed.
+|--------------------------------------------------------------------------
+*/
+
+$validatedFiles = 0;
+$analyzedFiles = 0;
+
+$scannerErrors = 0;
+$saveErrors = 0;
+
+$findingsSaved = 0;
+
+
+/*
+|--------------------------------------------------------------------------
+| PROCESS EACH SUBMITTED FILE
 |--------------------------------------------------------------------------
 */
 
@@ -932,16 +954,32 @@ foreach (
         !== UPLOAD_ERR_OK
     ) {
 
-        saveFinding(
-            $conn,
-            $scanId,
-            createSystemFinding(
-                $fileName,
-                'The file could not be uploaded. Upload error code: '
-                . $uploadError
-                . '.'
-            )
-        );
+        try {
+
+            saveFinding(
+                $conn,
+                $scanId,
+                createSystemFinding(
+                    $fileName,
+                    'The file could not be uploaded. Upload error code: '
+                    . $uploadError
+                    . '.'
+                )
+            );
+
+            $findingsSaved++;
+
+        } catch (Throwable $exception) {
+
+            $saveErrors++;
+
+            error_log(
+                'SecureLog Save Result Error ['
+                . $fileName
+                . ']: '
+                . $exception->getMessage()
+            );
+        }
 
         continue;
     }
@@ -958,14 +996,30 @@ foreach (
         || !is_uploaded_file($tmpName)
     ) {
 
-        saveFinding(
-            $conn,
-            $scanId,
-            createSystemFinding(
-                $fileName,
-                'The uploaded file could not be verified by the server.'
-            )
-        );
+        try {
+
+            saveFinding(
+                $conn,
+                $scanId,
+                createSystemFinding(
+                    $fileName,
+                    'The uploaded file could not be verified by the server.'
+                )
+            );
+
+            $findingsSaved++;
+
+        } catch (Throwable $exception) {
+
+            $saveErrors++;
+
+            error_log(
+                'SecureLog Save Result Error ['
+                . $fileName
+                . ']: '
+                . $exception->getMessage()
+            );
+        }
 
         continue;
     }
@@ -979,14 +1033,30 @@ foreach (
 
     if ($fileSize <= 0) {
 
-        saveFinding(
-            $conn,
-            $scanId,
-            createSystemFinding(
-                $fileName,
-                'The uploaded source-code file is empty.'
-            )
-        );
+        try {
+
+            saveFinding(
+                $conn,
+                $scanId,
+                createSystemFinding(
+                    $fileName,
+                    'The uploaded source-code file is empty.'
+                )
+            );
+
+            $findingsSaved++;
+
+        } catch (Throwable $exception) {
+
+            $saveErrors++;
+
+            error_log(
+                'SecureLog Save Result Error ['
+                . $fileName
+                . ']: '
+                . $exception->getMessage()
+            );
+        }
 
         continue;
     }
@@ -997,14 +1067,30 @@ foreach (
         > MAX_SOURCE_FILE_SIZE
     ) {
 
-        saveFinding(
-            $conn,
-            $scanId,
-            createSystemFinding(
-                $fileName,
-                'The uploaded source-code file exceeds the maximum size of 2 MB.'
-            )
-        );
+        try {
+
+            saveFinding(
+                $conn,
+                $scanId,
+                createSystemFinding(
+                    $fileName,
+                    'The uploaded source-code file exceeds the maximum size of 2 MB.'
+                )
+            );
+
+            $findingsSaved++;
+
+        } catch (Throwable $exception) {
+
+            $saveErrors++;
+
+            error_log(
+                'SecureLog Save Result Error ['
+                . $fileName
+                . ']: '
+                . $exception->getMessage()
+            );
+        }
 
         continue;
     }
@@ -1048,14 +1134,30 @@ foreach (
         $allowedText =
             '.' . $allowedText;
 
-        saveFinding(
-            $conn,
-            $scanId,
-            createSystemFinding(
-                $fileName,
-                "File skipped. The selected language is {$displayLanguage}, but this file has the extension .{$fileExtension}. Expected: {$allowedText}."
-            )
-        );
+        try {
+
+            saveFinding(
+                $conn,
+                $scanId,
+                createSystemFinding(
+                    $fileName,
+                    "File skipped. The selected language is {$displayLanguage}, but this file has the extension .{$fileExtension}. Expected: {$allowedText}."
+                )
+            );
+
+            $findingsSaved++;
+
+        } catch (Throwable $exception) {
+
+            $saveErrors++;
+
+            error_log(
+                'SecureLog Save Result Error ['
+                . $fileName
+                . ']: '
+                . $exception->getMessage()
+            );
+        }
 
         continue;
     }
@@ -1077,17 +1179,42 @@ foreach (
         || trim($content) === ''
     ) {
 
-        saveFinding(
-            $conn,
-            $scanId,
-            createSystemFinding(
-                $fileName,
-                'The uploaded source-code file is empty or could not be read.'
-            )
-        );
+        try {
+
+            saveFinding(
+                $conn,
+                $scanId,
+                createSystemFinding(
+                    $fileName,
+                    'The uploaded source-code file is empty or could not be read.'
+                )
+            );
+
+            $findingsSaved++;
+
+        } catch (Throwable $exception) {
+
+            $saveErrors++;
+
+            error_log(
+                'SecureLog Save Result Error ['
+                . $fileName
+                . ']: '
+                . $exception->getMessage()
+            );
+        }
 
         continue;
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | FILE SUCCESSFULLY VALIDATED
+    |--------------------------------------------------------------------------
+    */
+
+    $validatedFiles++;
 
 
     /*
@@ -1107,6 +1234,8 @@ foreach (
 
     } catch (Throwable $exception) {
 
+        $scannerErrors++;
+
         error_log(
             'SecureLog Scanner Error ['
             . $fileName
@@ -1114,14 +1243,30 @@ foreach (
             . $exception->getMessage()
         );
 
-        saveFinding(
-            $conn,
-            $scanId,
-            createSystemFinding(
-                $fileName,
-                'The scanner encountered an internal error while analyzing this file.'
-            )
-        );
+        try {
+
+            saveFinding(
+                $conn,
+                $scanId,
+                createSystemFinding(
+                    $fileName,
+                    'The scanner encountered an internal error while analyzing this file.'
+                )
+            );
+
+            $findingsSaved++;
+
+        } catch (Throwable $saveException) {
+
+            $saveErrors++;
+
+            error_log(
+                'SecureLog Save Result Error ['
+                . $fileName
+                . ']: '
+                . $saveException->getMessage()
+            );
+        }
 
         continue;
     }
@@ -1135,14 +1280,32 @@ foreach (
 
     if (!is_array($findings)) {
 
-        saveFinding(
-            $conn,
-            $scanId,
-            createSystemFinding(
-                $fileName,
-                'The scanner returned an invalid result.'
-            )
-        );
+        $scannerErrors++;
+
+        try {
+
+            saveFinding(
+                $conn,
+                $scanId,
+                createSystemFinding(
+                    $fileName,
+                    'The scanner returned an invalid result.'
+                )
+            );
+
+            $findingsSaved++;
+
+        } catch (Throwable $exception) {
+
+            $saveErrors++;
+
+            error_log(
+                'SecureLog Save Result Error ['
+                . $fileName
+                . ']: '
+                . $exception->getMessage()
+            );
+        }
 
         continue;
     }
@@ -1152,32 +1315,48 @@ foreach (
     |--------------------------------------------------------------------------
     | EMPTY SCANNER RESPONSE
     |--------------------------------------------------------------------------
-    |
-    | IMPORTANT:
-    |
-    | In the new architecture, a scanner should normally return
-    | PASS / FAIL / N/A results.
-    |
-    | Therefore an empty array means the scanner did not provide
-    | enough information to evaluate the file.
-    |
-    | We DO NOT create RuleID 0 anymore.
-    |
     */
 
     if (empty($findings)) {
 
-        saveFinding(
-            $conn,
-            $scanId,
-            createSystemFinding(
-                $fileName,
-                'SecureLog analyzed the file, but the scanner returned no security check results.'
-            )
-        );
+        $scannerErrors++;
+
+        try {
+
+            saveFinding(
+                $conn,
+                $scanId,
+                createSystemFinding(
+                    $fileName,
+                    'SecureLog analyzed the file, but the scanner returned no security check results.'
+                )
+            );
+
+            $findingsSaved++;
+
+        } catch (Throwable $exception) {
+
+            $saveErrors++;
+
+            error_log(
+                'SecureLog Save Result Error ['
+                . $fileName
+                . ']: '
+                . $exception->getMessage()
+            );
+        }
 
         continue;
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | SCANNER SUCCESSFULLY ANALYZED THIS FILE
+    |--------------------------------------------------------------------------
+    */
+
+    $analyzedFiles++;
 
 
     /*
@@ -1240,23 +1419,6 @@ foreach (
         |--------------------------------------------------------------------------
         | PASS / N/A MUST NOT HAVE CWE RULE ID
         |--------------------------------------------------------------------------
-        |
-        | Rule IDs identify detected rules/weaknesses.
-        |
-        | Example:
-        |
-        | FAIL CWE-778
-        |     RuleID = 77801
-        |
-        | FAIL CWE-117
-        |     RuleID = 11701
-        |
-        | PASS
-        |     RuleID = NULL
-        |
-        | N/A
-        |     RuleID = NULL
-        |
         */
 
         if (
@@ -1282,7 +1444,11 @@ foreach (
                 $finding
             );
 
+            $findingsSaved++;
+
         } catch (Throwable $exception) {
+
+            $saveErrors++;
 
             error_log(
                 'SecureLog Save Result Error ['
@@ -1291,12 +1457,178 @@ foreach (
                 . $exception->getMessage()
             );
 
-            /*
-             * Continue with other findings/files instead
-             * of terminating the entire batch scan.
-             */
             continue;
         }
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Activity Log - FILE_UPLOAD_COMPLETED
+|--------------------------------------------------------------------------
+|
+| This block is OUTSIDE both foreach loops.
+| Therefore one scan creates only one upload-completed event.
+|--------------------------------------------------------------------------
+*/
+
+if (
+    $currentUserId > 0
+    && function_exists('log_activity')
+) {
+
+    log_activity(
+        LOG_FILE_UPLOAD_COMPLETED,
+        $currentUserId,
+        'Source-code file upload processing completed.',
+        [
+            'module' => 'Scanner',
+            'severity' => 'INFO',
+            'result' => 'SUCCESS',
+
+            'target_type' => 'SCAN',
+            'target_id' => $scanId,
+
+            'metadata' => [
+                'programming_language' =>
+                    $displayLanguage,
+
+                'submitted_files' =>
+                    $totalSubmittedFiles,
+
+                'validated_files' =>
+                    $validatedFiles,
+
+                'rejected_files' =>
+                    $totalSubmittedFiles
+                    - $validatedFiles
+            ]
+        ]
+    );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| DETERMINE FINAL SCAN OUTCOME
+|--------------------------------------------------------------------------
+|
+| Security findings with Status = FAIL are NOT considered scanner errors.
+|
+| SCAN_FAILED is used when SecureLog itself could not successfully analyze
+| any submitted source-code file.
+|--------------------------------------------------------------------------
+*/
+
+if ($analyzedFiles > 0) {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Activity Log - SCAN_COMPLETED
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        $currentUserId > 0
+        && function_exists('log_activity')
+    ) {
+
+        log_activity(
+            LOG_SCAN_COMPLETED,
+            $currentUserId,
+            'Source-code security scan completed.',
+            [
+                'module' => 'Scanner',
+                'severity' => 'INFO',
+                'result' => 'SUCCESS',
+
+                'target_type' => 'SCAN',
+                'target_id' => $scanId,
+
+                'metadata' => [
+                    'programming_language' =>
+                        $displayLanguage,
+
+                    'submitted_files' =>
+                        $totalSubmittedFiles,
+
+                    'validated_files' =>
+                        $validatedFiles,
+
+                    'analyzed_files' =>
+                        $analyzedFiles,
+
+                    'rejected_files' =>
+                        $totalSubmittedFiles
+                        - $validatedFiles,
+
+                    'findings_saved' =>
+                        $findingsSaved,
+
+                    'scanner_errors' =>
+                        $scannerErrors,
+
+                    'save_errors' =>
+                        $saveErrors
+                ]
+            ]
+        );
+    }
+
+} else {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Activity Log - SCAN_FAILED
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        $currentUserId > 0
+        && function_exists('log_activity')
+    ) {
+
+        log_activity(
+            LOG_SCAN_FAILED,
+            $currentUserId,
+            'Source-code security scan could not analyze any submitted file.',
+            [
+                'module' => 'Scanner',
+                'severity' => 'ERROR',
+                'result' => 'FAILURE',
+
+                'target_type' => 'SCAN',
+                'target_id' => $scanId,
+
+                'metadata' => [
+                    'programming_language' =>
+                        $displayLanguage,
+
+                    'submitted_files' =>
+                        $totalSubmittedFiles,
+
+                    'validated_files' =>
+                        $validatedFiles,
+
+                    'analyzed_files' =>
+                        $analyzedFiles,
+
+                    'rejected_files' =>
+                        $totalSubmittedFiles
+                        - $validatedFiles,
+
+                    'findings_saved' =>
+                        $findingsSaved,
+
+                    'scanner_errors' =>
+                        $scannerErrors,
+
+                    'save_errors' =>
+                        $saveErrors
+                ]
+            ]
+        );
     }
 }
 

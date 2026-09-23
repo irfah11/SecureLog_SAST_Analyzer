@@ -307,27 +307,35 @@ if ($action === 'activate') {
     $updateStatement->close();
 
     /* --------------------------------------------------------
-       ACTIVITY LOG
-       -------------------------------------------------------- */
+    ACTIVITY LOG - RULE ACTIVATED
+    -------------------------------------------------------- */
 
     if (
         $currentAdminId > 0
-        && function_exists(
-            'log_activity'
-        )
+        && function_exists('log_activity')
     ) {
 
-        $logType =
-            defined(
-                'LOG_SCANNER_RULE_ACTIVATED'
-            )
-                ? LOG_SCANNER_RULE_ACTIVATED
-                : 'SCANNER_RULE_ACTIVATED';
-
         log_activity(
-            $logType,
+            LOG_RULE_ACTIVATED,
             $currentAdminId,
-            "Activated scanner rule {$ruleCode}: {$ruleName}"
+            'Administrator activated a scanner rule.',
+            [
+                'module' => 'ScannerRule',
+                'severity' => 'WARNING',
+                'result' => 'SUCCESS',
+
+                'target_type' => 'SCANNER_RULE',
+                'target_id' => $ruleId,
+
+                'metadata' => [
+                    'rule_code' => $ruleCode,
+                    'rule_name' => $ruleName,
+                    'previous_status' => $currentStatus,
+                    'new_status' => 'ACTIVE',
+                    'last_test_passed' => true,
+                    'last_tested_at' => $lastTestedAt
+                ]
+            ]
         );
     }
 
@@ -336,7 +344,6 @@ if ($action === 'activate') {
         "Scanner rule {$ruleCode} activated successfully."
     );
 }
-
 /* ============================================================
    DISABLE RULE
    ============================================================ */
@@ -355,24 +362,21 @@ if ($action === 'disable') {
         );
     }
 
+
     /* --------------------------------------------------------
-       DISABLE
+       DISABLE RULE
        -------------------------------------------------------- */
 
-    $newStatus =
-        'DISABLED';
+    $newStatus = 'DISABLED';
 
     $updateStatement =
         $conn->prepare(
             "
             UPDATE scanner_rules
-
             SET
                 Status = ?,
                 UpdatedAt = NOW()
-
             WHERE RuleID = ?
-
             LIMIT 1
             "
         );
@@ -385,15 +389,15 @@ if ($action === 'disable') {
         );
     }
 
+
     $updateStatement->bind_param(
         'si',
         $newStatus,
         $ruleId
     );
 
-    if (
-        !$updateStatement->execute()
-    ) {
+
+    if (!$updateStatement->execute()) {
 
         $updateStatement->close();
 
@@ -403,38 +407,70 @@ if ($action === 'disable') {
         );
     }
 
+
     $updateStatement->close();
 
+
     /* --------------------------------------------------------
-       ACTIVITY LOG
+       ACTIVITY LOG - RULE DISABLED
        -------------------------------------------------------- */
 
     if (
         $currentAdminId > 0
-        && function_exists(
-            'log_activity'
-        )
+        && function_exists('log_activity')
     ) {
 
-        $logType =
-            defined(
-                'LOG_SCANNER_RULE_DISABLED'
-            )
-                ? LOG_SCANNER_RULE_DISABLED
-                : 'SCANNER_RULE_DISABLED';
-
         log_activity(
-            $logType,
+            LOG_RULE_DISABLED,
             $currentAdminId,
-            "Disabled scanner rule {$ruleCode}: {$ruleName}"
+            'Administrator disabled a scanner rule.',
+            [
+                'module' => 'ScannerRule',
+                'severity' => 'WARNING',
+                'result' => 'SUCCESS',
+
+                'target_type' => 'SCANNER_RULE',
+                'target_id' => $ruleId,
+
+                'metadata' => [
+                    'rule_code' =>
+                        $ruleCode,
+
+                    'rule_name' =>
+                        $ruleName,
+
+                    'previous_status' =>
+                        $currentStatus,
+
+                    'new_status' =>
+                        $newStatus
+                ]
+            ]
         );
     }
+
+
+    /* --------------------------------------------------------
+       SUCCESS REDIRECT
+       -------------------------------------------------------- */
 
     redirectRuleAction(
         'success',
         "Scanner rule {$ruleCode} disabled successfully."
     );
+
+    exit();
 }
+
+
+/* ============================================================
+   FALLBACK
+   ============================================================ */
+
+redirectRuleAction(
+    'error',
+    'Unable to process scanner rule action.'
+);
 
 /* ============================================================
    FALLBACK
