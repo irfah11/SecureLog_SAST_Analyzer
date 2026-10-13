@@ -7,3 +7,11 @@
 
 # Generated logs
 *.log
+
+# SecureLog Vault secrets
+/SecureLogVault/keys/*
+!/SecureLogVault/keys/.htaccess
+
+# Generated encrypted audit archives
+/SecureLogVault/encrypted_logs/*
+!/SecureLogVault/encrypted_logs/.htaccess
