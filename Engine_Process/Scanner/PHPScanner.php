@@ -747,7 +747,7 @@ function securelogPhpStorageEvidence(string $code): array
     return ['status' => 'N/A', 'description' => 'The actual log destination cannot be established from this event and its resolved logger implementation.'];
 }
 
-/** Identify only clearly unprotected direct literal or raw-superglobal writes. */
+/** Identify direct file payloads proven plaintext by supported assignments. */
 function securelogPhpExplicitPlaintextWrite(string $code): bool
 {
     return findPhpEncryptionToLogFlow($code)['plaintext'];
@@ -1116,9 +1116,9 @@ function analyzePhpSecurityEventStatus(
     if ($encryptionFlow['encrypted']) {
         $protectionStatus = 'PASS';
         $protectionDescription = 'Recognized encryption flow to the logging operation was detected in this event.';
-    } elseif (!$sinkEvidence['indirect'] && securelogPhpExplicitPlaintextWrite($context)) {
+    } elseif (!$sinkEvidence['indirect'] && !empty($encryptionFlow['plaintext'])) {
         $protectionStatus = 'FAIL';
-        $protectionDescription = 'Explicit direct plaintext write to a log file was detected without a protection step.';
+        $protectionDescription = 'Explicit direct plaintext write to a log file was detected; the data written is not the encrypted payload.';
     } else {
         $protectionStatus = 'N/A';
         $protectionDescription = 'Protection at the logging destination or archive layer cannot be verified from this event.';
