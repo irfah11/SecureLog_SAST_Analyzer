@@ -1964,7 +1964,7 @@ if (isset($_GET['scan_id'])) {
         .upload-error { color:#fecaca; background:#450a0a; border:1px solid #991b1b;
                         padding:10px; border-radius:6px; font-size:.74rem; margin-bottom:12px; }
         .upload-box:focus-visible { outline:2px solid #60a5fa; outline-offset:3px; }
-    
+
 .logging-reminder { color:#acbdd0; background:#102238; border-left:3px solid #3c9de5; padding:10px 12px; font-size:.76rem; line-height:1.6; margin:12px 0 18px; }
 .scan-overview { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
 .scan-overview>div { padding:10px; background:#102238; border:1px solid #263b52; border-radius:6px; }

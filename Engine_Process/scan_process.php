@@ -532,7 +532,7 @@ function saveFinding(
 
     array $finding
 
-): void {
+): int {
 
 
 
@@ -1084,7 +1084,9 @@ function saveFinding(
 
 
 
+    $resultId = (int) $statement->insert_id;
     $statement->close();
+    return $resultId;
 
 }
 
@@ -3011,7 +3013,7 @@ foreach (
 
 
 
-            saveFinding(
+            $savedResultId = saveFinding(
 
                 $conn,
 
@@ -3022,7 +3024,7 @@ foreach (
             );
             $coverageFiles[$index]['saved_checks']++;
             if (isset($finding['event_key'], $finding['event_name'], $finding['event_line'])) {
-                $coverageEvents[(string) $conn->insert_id] = ['file' => $fileName,
+                $coverageEvents[(string) $savedResultId] = ['file' => $fileName,
                     'key' => $index . ':' . $finding['event_key'], 'name' => $finding['event_name'],
                     'line' => (int) $finding['event_line']];
             }
