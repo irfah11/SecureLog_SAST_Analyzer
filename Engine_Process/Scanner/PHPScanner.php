@@ -1837,186 +1837,105 @@ function hasPhpEncryptionOperation(
  *     $payload
  * );
  */
-function findPhpEncryptionToLogFlow(
-    string $code
-): array {
-
-    $result = [
-
-        'encrypted' => false,
-
-        'sink_line' => 0,
-
-        'variable' => null
-    ];
-
-
-    $statements =
-        getPhpLogicalStatements($code);
-
-
-    if (empty($statements)) {
-        return $result;
+/** Classify supported payload expressions; never search variable names in text. */
+function securelogPhpProtectionState(string $expression, array $states, int $depth = 0): string
+{
+    if ($depth > 12) return 'unknown';
+    $tokens = array_values(array_filter(securelogPhpTokens('<?php ' . $expression),
+        static fn(array $token): bool => !in_array($token['id'],
+            [T_OPEN_TAG, T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)));
+    if ($tokens === []) return 'unknown';
+    $last = count($tokens) - 1;
+    if ($tokens[0]['text'] === '(' && securelogPhpMatchPair($tokens, 0, '(', ')') === $last) {
+        return securelogPhpProtectionState(securelogPhpSlice($tokens, 1, $last - 1), $states, $depth + 1);
     }
-
-
-    /*
-     * Variables known to contain encrypted data.
-     */
-    $encryptedVariables = [];
-
-
-    foreach ($statements as $statementData) {
-
-        $statement =
-            $statementData['code'];
-
-        $statementLine =
-            $statementData['line'];
-
-
-        /* =====================================================
-           STEP 1
-           DIRECT ENCRYPTION → LOG_SINK
-           ===================================================== */
-
-        if (
-            hasPhpLogSink($statement)
-            &&
-            hasPhpEncryptionOperation($statement)
-        ) {
-
-            $result['encrypted'] =
-                true;
-
-            $result['sink_line'] =
-                $statementLine;
-
-            return $result;
+    $parts = []; $start = 0; $nesting = 0;
+    foreach ($tokens as $i => $token) {
+        if ($token['id'] !== null) continue;
+        if (in_array($token['text'], ['(', '[', '{'], true)) $nesting++;
+        elseif (in_array($token['text'], [')', ']', '}'], true)) $nesting--;
+        elseif ($token['text'] === '.' && $nesting === 0) {
+            $parts[] = securelogPhpSlice($tokens, $start, $i - 1);
+            $start = $i + 1;
         }
-
-
-        /* =====================================================
-           STEP 2
-           ENCRYPTION → VARIABLE
-           ===================================================== */
-
-        if (
-            preg_match(
-                '/\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?);?$/is',
-                $statement,
-                $assignment
-            ) === 1
-        ) {
-
-            $variableName =
-                $assignment[1];
-
-            $expression =
-                $assignment[2];
-
-
-            /*
-             * Example:
-             *
-             * $encryptedLog =
-             *     openssl_encrypt(...);
-             */
-            if (
-                hasPhpEncryptionOperation(
-                    $expression
-                )
-            ) {
-
-                $encryptedVariables[$variableName] =
-                    true;
-
-                continue;
-            }
-
-
-            /* =================================================
-               STEP 3
-               ENCRYPTED DATA PROPAGATION
-               ================================================= */
-
-            foreach (
-                $encryptedVariables
-                as $encryptedName => $status
-            ) {
-
-                if (
-                    preg_match(
-                        '/\$' .
-                        preg_quote(
-                            $encryptedName,
-                            '/'
-                        ) .
-                        '\b/',
-                        $expression
-                    ) === 1
-                ) {
-
-                    $encryptedVariables[$variableName] =
-                        true;
-
-                    break;
-                }
-            }
+    }
+    if ($parts !== []) {
+        $parts[] = securelogPhpSlice($tokens, $start, $last);
+        $kinds = array_map(static fn(string $part): string =>
+            securelogPhpProtectionState($part, $states, $depth + 1), $parts);
+        if (in_array('plain', $kinds, true)) return 'plain';
+        if (in_array('unknown', $kinds, true)) return 'unknown';
+        return in_array('encrypted', $kinds, true) ? 'encrypted' : 'metadata';
+    }
+    if (count($tokens) === 1) {
+        $token = $tokens[0];
+        if ($token['id'] === T_VARIABLE) return $states[$token['text']] ?? 'unknown';
+        if ($token['id'] === T_CONSTANT_ENCAPSED_STRING) {
+            $literal = substr($token['text'], 1, -1);
+            return preg_match('/^(?:\s|\\\\[rn])*$/D', $literal) ? 'metadata' : 'plain';
         }
+        if ($token['text'] === 'PHP_EOL') return 'metadata';
+    }
+    if ($tokens[0]['id'] === T_STRING && ($tokens[1]['text'] ?? '') === '('
+        && securelogPhpMatchPair($tokens, 1, '(', ')') === $last) {
+        $name = strtolower($tokens[0]['text']);
+        $args = securelogPhpCallArguments($tokens, 1, $last);
+        if (in_array($name, ['openssl_encrypt', 'sodium_crypto_secretbox'], true)
+            || preg_match('/^sodium_crypto_aead_[a-z0-9_]+_encrypt$/D', $name)) return 'encrypted';
+        if ($name === 'random_bytes') return 'metadata';
+        if (in_array($name, ['base64_encode', 'bin2hex'], true) && count($args) === 1) {
+            return securelogPhpProtectionState($args[0], $states, $depth + 1);
+        }
+        if (in_array($name, ['str_replace', 'preg_replace', 'trim', 'json_encode'], true)) {
+            $kinds = array_map(static fn(string $arg): string =>
+                securelogPhpProtectionState($arg, $states, $depth + 1), $args);
+            return in_array('plain', $kinds, true) ? 'plain' : 'unknown';
+        }
+    }
+    foreach ($tokens as $token) {
+        if ($token['id'] === T_VARIABLE && in_array($token['text'],
+            ['$_POST', '$_GET', '$_REQUEST', '$_COOKIE', '$_SERVER'], true)) return 'plain';
+    }
+    return 'unknown';
+}
 
-
-        /* =====================================================
-           STEP 4
-           ENCRYPTED VARIABLE → LOG_SINK
-           ===================================================== */
-
-        if (hasPhpLogSink($statement)) {
-
-            /*
-             * Remember where a LOG_SINK exists even if
-             * its data is not encrypted.
-             */
-            if ($result['sink_line'] === 0) {
-
-                $result['sink_line'] =
-                    $statementLine;
-            }
-
-
-            foreach (
-                $encryptedVariables
-                as $variableName => $status
-            ) {
-
-                if (
-                    preg_match(
-                        '/\$' .
-                        preg_quote(
-                            $variableName,
-                            '/'
-                        ) .
-                        '\b/',
-                        $statement
-                    ) === 1
-                ) {
-
-                    $result['encrypted'] =
-                        true;
-
-                    $result['sink_line'] =
-                        $statementLine;
-
-                    $result['variable'] =
-                        '$' . $variableName;
-
-                    return $result;
-                }
+function findPhpEncryptionToLogFlow(string $code): array
+{
+    $result = ['encrypted' => false, 'plaintext' => false, 'sink_line' => 0, 'variable' => null];
+    $states = [];
+    $sinks = 0;
+    $allEncrypted = true;
+    // Unsupported branching must not make assignment order appear conclusive.
+    foreach (securelogPhpTokens('<?php ' . $code) as $token) {
+        if (in_array($token['id'], [T_IF, T_ELSEIF, T_SWITCH, T_FOR, T_FOREACH,
+            T_WHILE, T_DO, T_TRY, T_MATCH], true)) return $result;
+    }
+    foreach (getPhpLogicalStatements($code) as $statementData) {
+        $statement = $statementData['code'];
+        if (preg_match('/^\s*(\$[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?![=>])(.+);\s*$/s', $statement, $match)) {
+            // Overwriting a variable invalidates its earlier encryption evidence.
+            $states[$match[1]] = securelogPhpProtectionState($match[2], $states);
+        }
+        foreach (securelogPhpBuiltinCalls($statement) as $call) {
+            $name = $call['name'];
+            $args = $call['args'];
+            if (!in_array($name, ['file_put_contents', 'fwrite', 'error_log', 'syslog'], true)) continue;
+            $payloadAt = $name === 'error_log' ? 0 : 1;
+            if (!isset($args[$payloadAt])) continue;
+            if (in_array($name, ['file_put_contents', 'fwrite'], true)
+                && !securelogPhpHasActualSink($statement)) continue;
+            $state = securelogPhpProtectionState($args[$payloadAt], $states);
+            $sinks++;
+            $allEncrypted = $allEncrypted && $state === 'encrypted';
+            $result['sink_line'] = $statementData['line'];
+            if ($name === 'file_put_contents') {
+                $path = securelogPhpStaticLogPath($args[0]);
+                if ($path !== null && preg_match('/(?:log|audit|security|event)/i', $path)
+                    && in_array($state, ['plain', 'metadata'], true)) $result['plaintext'] = true;
             }
         }
     }
-
-
+    $result['encrypted'] = $sinks > 0 && $allEncrypted && !$result['plaintext'];
     return $result;
 }
 
@@ -2404,6 +2323,14 @@ function getPhpAnalysisContext(
 function getPhpLogicalStatements(
     string $code
 ): array {
+
+    $clean = '';
+    foreach (securelogPhpTokens('<?php ' . $code) as $token) {
+        if ($token['id'] === T_OPEN_TAG) continue;
+        $clean .= in_array($token['id'], [T_COMMENT, T_DOC_COMMENT], true)
+            ? preg_replace('/[^\r\n]/', ' ', $token['text']) : $token['text'];
+    }
+    $code = $clean;
 
     $lines = preg_split(
         "/\r\n|\n|\r/",
