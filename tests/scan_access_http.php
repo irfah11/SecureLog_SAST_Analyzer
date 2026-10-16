@@ -58,6 +58,9 @@ try {
         usleep(100000);
     }
     $assert($ready, 'Isolated loopback server starts');
+    [$status, $body] = $request('Engine_Process/index.php', 'owner');
+    $assert($status === 200 && str_contains($body, 'Ready to analyze'), 'Authenticated new-scan page is ready without a scan ID');
+    $assert(str_contains($body, 'Not every file requires security logging'), 'Upload reminder explains event-based logging');
     foreach (['Engine_Process/index.php', 'Engine_Process/scan_process.php',
         'Engine_Process/Download_report.php?scan_id=' . $scanId] as $endpoint) {
         [$status, $body, $headers] = $request($endpoint);
@@ -68,6 +71,7 @@ try {
     $page = 'Engine_Process/index.php?scan_id=' . $scanId;
     [$status, $body] = $request($page, 'owner');
     $assert($status === 200 && !str_contains($body, 'Fatal error'), 'Owner can view existing scan');
+    $assert(str_contains($body, 'Scan Coverage'), 'Authorized scan page includes coverage section');
     [$status, $body] = $request($page, 'other');
     $assert($status === 404 && trim($body) === 'Scan report not found.', 'Other developer receives no scan results');
     [$status, $body] = $request($page, 'admin');
@@ -97,6 +101,15 @@ try {
     $assert($status === 200 && str_starts_with($body, '%PDF-'), 'Admin can download PDF');
     [$status] = $request($reportUrl . '&format=xml', 'owner');
     $assert($status === 400, 'Unsupported report format rejected');
+    [$status, $body] = $request($reportUrl, 'owner');
+    $assert($status === 200 && str_contains($body, 'COMPACT REPORT') && str_contains($body, 'detail=full'), 'Default report is compact with full-detail option');
+    [$status, $body] = $request($reportUrl . '&detail=full', 'owner');
+    $assert($status === 200 && (str_contains($body, 'Recorded code evidence')
+        || str_contains($body, 'How to interpret this report')), 'Owner can access full report');
+    [$status] = $request($reportUrl . '&detail=unknown', 'owner');
+    $assert($status === 400, 'Invalid detail mode rejected by endpoint');
+    [$status] = $request($reportUrl . '&format=pdf&detail=full', 'other');
+    $assert($status === 404, 'Full PDF also enforces scan ownership');
 } finally {
     proc_terminate($process);
     proc_close($process);

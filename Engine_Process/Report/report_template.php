@@ -60,7 +60,8 @@ pre { background:#0b192b; padding:9px; font-family:"DejaVu Sans Mono",monospace;
 <?php if (!$pdf): ?>
 <nav class="actions" aria-label="Report actions">
 <a href="index.php?scan_id=<?= (int) $report['id'] ?>">Back to scan</a>
-<a class="download" href="Download_report.php?scan_id=<?= (int) $report['id'] ?>&amp;format=pdf">Download PDF</a>
+<a href="Download_report.php?scan_id=<?= (int) $report['id'] ?>">Compact report</a>
+<a class="download" href="Download_report.php?scan_id=<?= (int) $report['id'] ?>&amp;format=pdf&amp;detail=full">Download PDF (full)</a>
 </nav>
 <?php endif; ?>
 <header class="header">

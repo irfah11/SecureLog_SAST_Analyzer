@@ -205,6 +205,11 @@ $findingStmt->close();
 $report = securelogReportModel($scan, $rows);
 
 $format = $_GET['format'] ?? 'html';
+$detail = $_GET['detail'] ?? 'compact';
+if (!is_string($detail) || !in_array($detail, ['compact', 'full'], true)) {
+    http_response_code(400);
+    exit('Invalid report detail.');
+}
 if (!is_string($format) || !in_array($format, ['html', 'pdf'], true)) {
     http_response_code(400);
     exit('Invalid report format.');
@@ -214,18 +219,18 @@ header('Pragma: no-cache');
 header('X-Content-Type-Options: nosniff');
 if ($format === 'pdf') {
     try {
-        $bytes = securelogReportPdf($report);
+        $bytes = securelogReportPdf($report, $detail);
     } catch (Throwable $error) {
         error_log('SecureLog PDF generation failed for scan ' . $scanId . ': ' . $error->getMessage());
         http_response_code(500);
         exit('Unable to generate the PDF. Please try again or contact the administrator.');
     }
     header('Content-Type: application/pdf');
-    header('Content-Disposition: attachment; filename="SecureLog-Scan-' . $scanId . '.pdf"');
+    header('Content-Disposition: attachment; filename="SecureLog-Scan-' . $scanId . ($detail === 'full' ? '-full' : '') . '.pdf"');
     header('Content-Length: ' . strlen($bytes));
     echo $bytes;
     exit;
 }
 header('Content-Type: text/html; charset=UTF-8');
 header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");
-echo securelogReportHtml($report);
+echo securelogReportHtml($report, false, $detail);

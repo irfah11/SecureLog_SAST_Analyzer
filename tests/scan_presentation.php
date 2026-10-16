@@ -60,6 +60,11 @@ $presentation = securelogPresentation([], ['outcome' => 'completed', 'files' => 
 ob_start(); require __DIR__ . '/../Engine_Process/scan_results_view.php'; $empty = ob_get_clean();
 $assert(str_contains($empty, 'Analysis completed with no security checks generated'), 'Completed no-event scan has a meaningful empty state');
 $assert(securelogLoadCoverage(-1, 1) === null && securelogLoadCoverage(1234, 0) === null, 'Coverage reads reject invalid identities');
+$scan_info = null;
+$presentation = securelogPresentation([], null);
+ob_start(); require __DIR__ . '/../Engine_Process/scan_results_view.php'; $readyHtml = ob_get_clean();
+$assert(str_contains($readyHtml, 'Ready to analyze'), 'New-scan page works before a scan ID is selected');
+$scan_info = ['ScanID' => 1234, 'total_files' => 4];
 // Persist only a unique synthetic sidecar, then remove that exact file.
 $id = random_int(1000000000, 2000000000);
 $path = __DIR__ . '/../Dashboard/logs/scan_coverage/' . $id . '.json';

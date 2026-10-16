@@ -1,6 +1,6 @@
 # Scan report and PDF download
 
-The scanner's PDF button downloads `SecureLog-Scan-<ScanID>.pdf` directly.
+The scanner's PDF button downloads a compact `SecureLog-Scan-<ScanID>.pdf` directly.
 The History page's View Report action opens the readable report preview, which
 also has a Download PDF action. Both formats use the same saved scan/results.
 
@@ -8,6 +8,16 @@ Routes:
 
 - Preview: `Engine_Process/Download_report.php?scan_id=<ScanID>`
 - PDF attachment: `Engine_Process/Download_report.php?scan_id=<ScanID>&format=pdf`
+- Full preview: add `&detail=full` to the preview route.
+- Full PDF: add `&detail=full` to the PDF route. Its filename ends in `-full.pdf`.
+
+The compact report is the default for both preview and download. It retains every
+failed check's severity, file, line, standard and saved result reference in a
+compact table. General remediation is listed once per check type. PASS and N/A
+are aggregated by check/standard; they are not silently treated as resolved.
+The full report preserves each explanation, saved remediation and source snippet.
+The preview links allow switching between compact and full modes. There is no
+fixed page cap or hidden failure limit; page count depends on the scan contents.
 
 Developers can access their own scans; admins can access all scans. Anonymous
 requests redirect to login; other roles receive 403. Missing or inaccessible
@@ -43,7 +53,10 @@ PDF bytes are generated in memory; no public report archive is created.
 
 ## Verification
 
-- `php tests/report_rendering.php`: report content, counts, escaping, source
+- `php tests/report_compact.php`: compact/default behavior, every failed result
+  reference retained, aggregated counts, full-detail availability and PDF output.
+  The synthetic 29 FAIL / 37 PASS / 142 N/A case renders to three compact pages.
+- `php tests/report_rendering.php`: full report content, counts, escaping, source
   evidence, missing evidence, N/A reasons, empty scans and multi-page PDF checks.
   An optional output-directory argument saves synthetic PDFs for visual review.
 - `php tests/scan_access_http.php`: read-only HTTP checks against local MySQL

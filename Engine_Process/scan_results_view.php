@@ -1,8 +1,9 @@
 <?php
-if (!isset($presentation, $scan_info) || !function_exists('securelogPresentationEscape')) {
+if (!isset($presentation) || !function_exists('securelogPresentationEscape')) {
     http_response_code(404); exit('Not found.');
 }
 $escape = 'securelogPresentationEscape';
+$scan_info = $scan_info ?? null;
 $counts = $presentation['counts'];
 $coverage = $presentation['coverage'];
 ?>

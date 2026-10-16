@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . '/../Engine_Process/Report/ScanReport.php';
+function fullReportHtml(array $report): string { return securelogReportHtml($report, false, 'full'); }
+function fullReportPdf(array $report): string { return securelogReportPdf($report, 'full'); }
 $assert = static function (bool $condition, string $message): void {
     if (!$condition) throw new RuntimeException($message);
     echo "PASS: {$message}\n";
@@ -27,7 +29,7 @@ $allPassed[3]['Status'] = 'PASS';
 $allPassedModel = securelogReportModel($scan, $allPassed);
 $assert(count($allPassedModel['groups']['PASS']) === 4 && $allPassedModel['groups']['FAIL'] === []
     && $allPassedModel['highest'] === 'No failed checks recorded', 'Test 21 all-pass report has zero failed checks');
-$html = securelogReportHtml($report);
+$html = fullReportHtml($report);
 $assert(str_contains($html, 'format=pdf') && !str_contains($html, 'window.print'), 'Preview provides a real PDF download link');
 $assert(str_contains($html, 'SL-2201-R104') && str_contains($html, 'Write base64_encode'), 'Stable references and saved remediation are included');
 $assert(str_contains($html, 'file_put_contents('), 'Saved source evidence is included');
@@ -35,7 +37,7 @@ foreach (['Security Logging', 'Log Neutralization', 'Log Storage'] as $name) {
     $assert(str_contains($html, $name), 'Passed check details preserved: ' . $name);
 }
 $empty = securelogReportModel(array_merge($scan, ['Status' => 'Pending']), []);
-$emptyHtml = securelogReportHtml($empty);
+$emptyHtml = fullReportHtml($empty);
 $assert(str_contains($emptyHtml, 'No security-check records are available.') && $empty['status'] === 'Pending', 'Zero results do not imply completed or secure scan');
 $naRows = $rows;
 $naRows[0]['Status'] = 'N/A';
@@ -43,18 +45,18 @@ $naRows[0]['Description'] = 'Dynamic include could not be resolved.';
 $naRows[] = ['Status' => 'N/A', 'Standard' => 'SecureLog System', 'VulnerabilityName' => 'Scan Validation', 'Description' => 'Source file skipped.'];
 $na = securelogReportModel($scan, $naRows);
 $assert($na['total'] === 4 && count($na['groups']['SYSTEM']) === 1, 'Processing notes are separate from security check counts');
-$assert(str_contains(securelogReportHtml($na), 'Dynamic include could not be resolved.'), 'Individual N/A reasons remain visible');
+$assert(str_contains(fullReportHtml($na), 'Dynamic include could not be resolved.'), 'Individual N/A reasons remain visible');
 $attack = $rows;
 $attack[3]['Description'] = '<script>alert(1)</script><img src="file:///secret">';
 $attack[3]['MatchedCode'] = '<?php echo "<b>code</b>"; ?>';
-$safeHtml = securelogReportHtml(securelogReportModel($scan, $attack));
+$safeHtml = fullReportHtml(securelogReportModel($scan, $attack));
 $assert(!str_contains($safeHtml, '<script>') && !str_contains($safeHtml, '<img') && str_contains($safeHtml, '&lt;?php'), 'Untrusted descriptions and source are escaped');
 $missing = $rows;
 $missing[3]['MatchedCode'] = '';
-$assert(str_contains(securelogReportHtml(securelogReportModel($scan, $missing)), 'No code snippet was saved.'), 'Missing snippets are disclosed without reading disk paths');
-$bytes = securelogReportPdf($report);
+$assert(str_contains(fullReportHtml(securelogReportModel($scan, $missing)), 'No code snippet was saved.'), 'Missing snippets are disclosed without reading disk paths');
+$bytes = fullReportPdf($report);
 $assert(str_starts_with($bytes, '%PDF-'), 'Sample report is actual PDF bytes');
-$emptyPdf = securelogReportPdf($empty);
+$emptyPdf = fullReportPdf($empty);
 $assert(str_starts_with($emptyPdf, '%PDF-'), 'Zero-result report remains downloadable');
 $stressRows = $rows;
 for ($i = 0; $i < 16; $i++) {
@@ -66,7 +68,7 @@ for ($i = 0; $i < 16; $i++) {
     $stressRows[] = $row;
 }
 $stressRows[count($stressRows) - 1]['Description'] .= ' END_OF_STRESS_EVIDENCE';
-$stress = securelogReportPdf(securelogReportModel($scan, $stressRows));
+$stress = fullReportPdf(securelogReportModel($scan, $stressRows));
 $assert(str_starts_with($stress, '%PDF-'), 'Long multi-page report renders');
 if (isset($argv[1])) {
     $output = rtrim($argv[1], '/\\');

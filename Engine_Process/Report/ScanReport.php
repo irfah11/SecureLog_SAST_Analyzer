@@ -80,14 +80,15 @@ function securelogReportImpact(array $row): string
     };
 }
 
-function securelogReportHtml(array $report, bool $pdf = false): string
+function securelogReportHtml(array $report, bool $pdf = false, string $detail = 'compact'): string
 {
+    if (!in_array($detail, ['compact', 'full'], true)) throw new InvalidArgumentException('Invalid report detail.');
     ob_start();
-    require __DIR__ . '/report_template.php';
+    require __DIR__ . ($detail === 'full' ? '/report_template.php' : '/compact_template.php');
     return (string) ob_get_clean();
 }
 
-function securelogReportPdf(array $report): string
+function securelogReportPdf(array $report, string $detail = 'compact'): string
 {
     require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
     $options = new Dompdf\Options();
@@ -100,7 +101,7 @@ function securelogReportPdf(array $report): string
     $options->setDefaultMediaType('print');
     $pdf = new Dompdf\Dompdf($options);
     $pdf->setPaper('A4', 'portrait');
-    $pdf->loadHtml(securelogReportHtml($report, true), 'UTF-8');
+    $pdf->loadHtml(securelogReportHtml($report, true, $detail), 'UTF-8');
     $pdf->render();
     $id = (int) $report['id'];
     $pdf->getCanvas()->page_script(static function ($pageNumber, $pageCount, $canvas, $fontMetrics) use ($id): void {
