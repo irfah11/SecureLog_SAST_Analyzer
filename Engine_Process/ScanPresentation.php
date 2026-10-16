@@ -79,6 +79,9 @@ function securelogPresentation(array $rows, ?array $coverage): array
             usort($event['rows'], static fn(array $a, array $b): int => $ranks[$a['Status']] <=> $ranks[$b['Status']]);
         }
         unset($event);
+        $file['rows'] = [];
+        foreach ($file['events'] as $event) array_push($file['rows'], ...$event['rows']);
+        usort($file['rows'], static fn(array $a, array $b): int => $ranks[$a['Status']] <=> $ranks[$b['Status']]);
         uasort($file['events'], static fn(array $a, array $b): int => ($b['failed'] <=> $a['failed']) ?: ($a['line'] <=> $b['line']));
     }
     unset($file);

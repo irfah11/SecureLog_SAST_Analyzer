@@ -18,10 +18,14 @@ save process. These are presentation fields, not changed detection criteria.
 Multiple events on the same line have different identifiers. Dependent checks
 remain grouped with their event even if their finding lines differ.
 
-Files and events with FAIL checks appear first and open by default. Other files
-and events start collapsed. Checks inside a group are ordered FAIL, PASS, N/A.
+The page shows a file name immediately above one Status / Check / Detail table.
+There is no nested event panel or event-count card. Files with FAIL checks appear
+first and open by default; a single file also opens automatically. Other files
+start collapsed. Each file's checks are ordered FAIL, PASS, N/A, with no results
+removed. Event metadata is retained internally to keep distinct events separate.
 The existing descriptions, rules, severity and finding lines remain visible.
-System/validation messages are not included in security-check counts.
+System/validation messages are not included in security-check counts. Scan
+Coverage is initially collapsed and can be opened when processing detail is needed.
 
 Coverage separates files analyzed with checks, files analyzed without a supported
 event, unsupported extensions, validation rejections and scanner failures. A

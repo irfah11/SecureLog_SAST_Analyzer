@@ -14,9 +14,8 @@ $coverage = $presentation['coverage'];
 <?php foreach (['FAIL' => 'Failed checks', 'PASS' => 'Passed checks', 'N/A' => 'N/A checks'] as $key => $label): ?>
 <div><strong><?= (int) $counts[$key] ?></strong><span><?= $label ?></span></div>
 <?php endforeach; ?>
-<div><strong><?= (int) $presentation['events'] ?></strong><span>Event / check groups</span></div>
 </div>
-<p class="scan-guidance">Files and event groups with failed checks appear first and open automatically. PASS and N/A remain available inside each group.</p>
+<p class="scan-guidance">Select a file to view its checks. Files with failed checks appear first.</p>
 <?php if (!$presentation['files']): ?>
 <div class="scan-message">
 <?php if ($coverage && $coverage['outcome'] === 'completed'): ?>
@@ -29,16 +28,12 @@ $coverage = $presentation['coverage'];
 </div>
 <?php endif; ?>
 <?php foreach ($presentation['files'] as $fileNumber => $file): ?>
-<details class="scan-file" <?= $file['failed'] > 0 ? 'open' : '' ?>>
-<summary><span class="scan-path"><?= $escape($file['path']) ?></span>
-<span class="scan-count <?= $file['failed'] > 0 ? 'has-fail' : '' ?>"><?= (int) $file['failed'] ?> FAIL · <?= count($file['events']) ?> group(s)</span></summary>
+<details class="scan-file" <?= $file['failed'] > 0 || count($presentation['files']) === 1 ? 'open' : '' ?>>
+<summary><span class="scan-path"><?= $escape($file['path']) ?></span></summary>
 <div class="scan-file-content">
-<?php foreach ($file['events'] as $event): ?>
-<details class="scan-event" <?= $event['failed'] > 0 ? 'open' : '' ?>>
-<summary><span><?= $escape($event['name']) ?><?= $event['line'] > 0 ? ' · Line ' . (int) $event['line'] : '' ?></span>
-<span class="scan-count"><?= (int) $event['counts']['FAIL'] ?> FAIL / <?= (int) $event['counts']['PASS'] ?> PASS / <?= (int) $event['counts']['N/A'] ?> N/A</span></summary>
+<?php if ($file['rows']): ?>
 <table class="analysis-table"><thead><tr><th>Status</th><th>Check</th><th>Detail</th></tr></thead><tbody>
-<?php foreach ($event['rows'] as $row): ?>
+<?php foreach ($file['rows'] as $row): ?>
 <tr id="result-<?= (int) ($row['ResultID'] ?? 0) ?>">
 <td><span class="status <?= $escape(getStatusClass($row['Status'])) ?>"><i class="fas <?= $escape(getStatusIcon($row['Status'])) ?>"></i> <?= $escape($row['Status']) ?></span></td>
 <td><span class="check-name"><?= $escape(getCheckName($row)) ?></span></td>
@@ -49,15 +44,14 @@ $coverage = $presentation['coverage'];
 <?php endforeach; ?>
 </div></td></tr>
 <?php endforeach; ?>
-</tbody></table></details>
-<?php endforeach; ?>
+</tbody></table>
+<?php endif; ?>
 <?php foreach ($file['notes'] as $note): ?>
 <div class="scan-message"><strong>Processing note</strong><p><?= $escape($note['Description'] ?? '') ?></p></div>
 <?php endforeach; ?>
 </div></details>
 <?php endforeach; ?>
-<?php if (!$coverage && $presentation['files']): ?><p class="scan-guidance">This scan predates event metadata. Groups are reconstructed from saved check order and are not a complete event inventory.</p><?php endif; ?>
-<details class="scan-coverage" open><summary>Scan Coverage</summary>
+<details class="scan-coverage"><summary>Scan Coverage</summary>
 <?php if (!$coverage): ?>
 <p class="scan-guidance">Per-file coverage was not recorded for this scan. <?= (int) ($scan_info['total_files'] ?? $scan_info['TotalFiles'] ?? 0) ?> file(s) were submitted, but files without findings cannot be confirmed as analyzed from these records. Run a new scan to capture coverage.</p>
 <?php else: ?>

@@ -40,7 +40,7 @@ $scan_info = ['ScanID' => 1234, 'total_files' => 4];
 ob_start(); require __DIR__ . '/../Engine_Process/scan_results_view.php'; $html = ob_get_clean();
 $assert(str_contains($html, 'dashboard.php') && str_contains($html, 'No supported event'), 'Coverage lists analyzed dashboard without findings');
 $assert(str_contains($html, 'logger.php'), 'Coverage also lists helper file');
-$assert(str_contains($html, 'class="scan-file" open') && str_contains($html, 'class="scan-event" open'), 'Failed groups open automatically');
+$assert(str_contains($html, 'class="scan-file" open') && !str_contains($html, 'class="scan-event"'), 'Failed files open directly to their checks without nested event panels');
 $assert(str_contains($html, 'class="scan-file" >'), 'Non-failed file groups remain collapsible and closed');
 $assert(str_contains($html, 'Scan Coverage') && str_contains($html, 'Only submitted files are covered'), 'Coverage explanation is visible');
 $legacy = securelogPresentation($rows, null);
