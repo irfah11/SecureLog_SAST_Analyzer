@@ -82,6 +82,21 @@ try {
     }
     [$status, $body] = $request('Engine_Process/Download_report.php?scan_id=' . $scanId, 'other');
     $assert($status === 404 && trim($body) === 'Scan report not found.', 'Report endpoint also denies other developer');
+    $reportUrl = 'Engine_Process/Download_report.php?scan_id=' . $scanId;
+    [$status, $body] = $request($reportUrl, 'owner');
+    $assert($status === 200 && str_contains($body, 'Download PDF'), 'Owner can preview report with download action');
+    [$status, $body, $headers] = $request($reportUrl . '&format=pdf', 'owner');
+    $assert($status === 200 && str_starts_with($body, '%PDF-'), 'Owner downloads actual PDF');
+    $headerText = strtolower(implode("\n", $headers));
+    $assert(str_contains($headerText, 'content-type: application/pdf')
+        && str_contains($headerText, 'content-disposition: attachment; filename="securelog-scan-'), 'PDF has attachment headers');
+    $assert(str_contains($headerText, 'no-store'), 'Private report is not cached');
+    [$status, $body] = $request($reportUrl . '&format=pdf', 'other');
+    $assert($status === 404 && !str_starts_with($body, '%PDF-'), 'Other developer cannot bypass ownership with PDF format');
+    [$status, $body] = $request($reportUrl . '&format=pdf', 'admin');
+    $assert($status === 200 && str_starts_with($body, '%PDF-'), 'Admin can download PDF');
+    [$status] = $request($reportUrl . '&format=xml', 'owner');
+    $assert($status === 400, 'Unsupported report format rejected');
 } finally {
     proc_terminate($process);
     proc_close($process);

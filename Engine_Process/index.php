@@ -2687,7 +2687,7 @@ include '../Sidebar/sidebaruser.php';
 
                         <a
 
-                            href="Download_report.php?scan_id=<?= (int)$scan_id ?>"
+                            href="Download_report.php?scan_id=<?= (int)$scan_id ?>&amp;format=pdf"
 
                             class="btn btn-success"
 
