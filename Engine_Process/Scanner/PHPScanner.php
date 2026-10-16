@@ -28,7 +28,7 @@ require_once __DIR__ . '/ScannerEngine.php';
  *      |
  *      v
  * [4] LOG PROTECTION
- *     SecureLog Policy (Encryption)
+ *     SecureLog Policy (Evidence-based protection assessment)
  *
  *
  * STATUS
@@ -108,226 +108,665 @@ function createPhpCheckResult(
    MAIN PHP SCANNER
    ============================================================ */
 
-function scanPHP(
-    string $fileName,
-    string $content
-): array {
+function scanPHP(string $fileName, string $content, array $projectSources = []): array
+{
+    $results = [];
+    $events = securelogPhpDiscoverEvents($content);
+    $definitions = securelogPhpProjectDefinitions($fileName, $content, $projectSources);
 
-    $lines = preg_split(
-        "/\r\n|\n|\r/",
-        $content
-    );
+    foreach ($events as $event) {
+        $rule = $event['rule'];
+        $eventName = $rule === 77801 ? 'Authentication Failure'
+            : ($rule === 77802 ? 'Access Control Failure' : 'Exception Handling');
 
-    if ($lines === false) {
-        return [];
+        $description = $rule === 77801
+            ? 'SecureLog detected an authentication failure path without an associated security logging operation.'
+            : ($rule === 77802
+                ? 'SecureLog detected an access-control denial or authorization failure without an associated security logging operation.'
+                : 'SecureLog detected exception handling without an associated logging operation.');
+
+        $recommendation = $rule === 77801
+            ? 'Record failed authentication attempts using an appropriate security logging mechanism. Do not log passwords, tokens, or credentials.'
+            : ($rule === 77802
+                ? 'Record denied or unauthorized access attempts using an appropriate security logging mechanism.'
+                : 'Record security-relevant or operational exceptions using an appropriate logger while avoiding sensitive information.');
+
+        // Resolve same-file custom logger wrappers, without trusting their names.
+        $sinkEvidence = securelogPhpResolveSink($event['body'], $definitions);
+
+        // A sink somewhere in the body is not proof that every execution path
+        // logs the event (e.g. if ($enableLogging) error_log(...)).
+        $pathStatus = securelogPhpAssessLoggingPaths($event['body'], $definitions);
+        $sinkEvidence['path_gap'] = $pathStatus === 'FAIL' && $sinkEvidence['status'] === 'PASS';
+        $sinkEvidence['path_uncertain'] = $pathStatus === 'N/A' && $sinkEvidence['status'] === 'PASS';
+        if ($pathStatus !== 'PASS') {
+            $sinkEvidence['status'] = $pathStatus;
+        }
+
+        // IMPORTANT: Analyze only statements on the detected event path.
+        // Code preceding the condition, and code after its closing brace,
+        // must not make the event appear logged.
+        analyzePhpSecurityEventStatus(
+            $results,
+            $fileName,
+            $event['line'],
+            $event['body'],
+            $rule,
+            $eventName,
+            $description,
+            $recommendation,
+            $sinkEvidence
+        );
     }
 
-    $results = [];
+    // A file without supported events belongs to scan coverage, not findings.
 
-    /*
-     * Prevent duplicate security events.
-     */
-    $reportedEvents = [];
+    return $results;
+}
 
+/** Resolve only leading, unconditional static includes in the uploaded source map.
+ * Uploaded PHP is tokenized, never executed; no include target is read from disk.
+ * Dynamic paths, conditional includes and namespace/class binding are unsupported.
+ */
+function securelogPhpProjectDefinitions(string $fileName, string $content, array $sources): array
+{
+    $definitions = securelogPhpCollectDefinitions($content);
+    $seen = [];
+    $duplicates = [];
+    $visit = function (string $path, string $code, int $depth) use (
+        &$visit, &$seen, &$definitions, &$duplicates, $sources
+    ): void {
+        if ($depth > 12 || isset($seen[$path])) return;
+        $seen[$path] = true;
+        $tokens = securelogPhpTokens($code);
+        $at = securelogPhpNextToken($tokens, 0);
+        // PHP permits blank text before the opening tag in uploaded files.
+        while ($at !== null && $tokens[$at]['id'] === T_INLINE_HTML
+            && trim($tokens[$at]['text']) === '') {
+            $at = securelogPhpNextToken($tokens, $at + 1);
+        }
+        if ($at !== null && $tokens[$at]['id'] === T_OPEN_TAG) {
+            $at = securelogPhpNextToken($tokens, $at + 1);
+        }
+        while ($at !== null && in_array($tokens[$at]['id'],
+            [T_REQUIRE, T_REQUIRE_ONCE, T_INCLUDE, T_INCLUDE_ONCE], true)) {
+            $end = $at + 1;
+            while (isset($tokens[$end]) && $tokens[$end]['text'] !== ';') $end++;
+            if (!isset($tokens[$end])) break;
+            $expr = [];
+            for ($i = $at + 1; $i < $end; $i++) {
+                if (!in_array($tokens[$i]['id'], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                    $expr[] = $tokens[$i];
+                }
+            }
+            if (count($expr) >= 2 && $expr[0]['text'] === '(' && end($expr)['text'] === ')') {
+                $expr = array_slice($expr, 1, -1);
+            }
+            $literal = null;
+            if (count($expr) === 1 && $expr[0]['id'] === T_CONSTANT_ENCAPSED_STRING) {
+                $literal = $expr[0]['text'];
+            } elseif (count($expr) === 3 && $expr[0]['id'] === T_DIR
+                && $expr[1]['text'] === '.' && $expr[2]['id'] === T_CONSTANT_ENCAPSED_STRING) {
+                $literal = $expr[2]['text'];
+                // __DIR__ suffix must start with a directory separator.
+                if (!in_array(substr($literal, 1, 1), ['/', '\\'], true)) $literal = null;
+            }
+            if ($literal !== null) {
+                $target = substr($literal, 1, -1);
+                // Escaped literals are left unresolved instead of guessing PHP decoding.
+                if (!str_contains($target, '\\') && !str_contains($target, ':')
+                    && (count($expr) === 3 || !str_starts_with($target, '/'))) {
+                    $segments = explode('/', (dirname($path) === '.' ? '' : dirname($path) . '/')
+                        . (count($expr) === 3 ? ltrim($target, '/') : $target));
+                    $normalized = [];
+                    $safe = true;
+                    foreach ($segments as $segment) {
+                        if ($segment === '' || $segment === '.') continue;
+                        if ($segment === '..') {
+                            if ($normalized === []) { $safe = false; break; }
+                            array_pop($normalized);
+                        } else $normalized[] = $segment;
+                    }
+                    $resolved = implode('/', $normalized);
+                    if ($safe && isset($sources[$resolved]) && !isset($seen[$resolved]) && $depth < 12) {
+                        $dependency = $sources[$resolved];
+                        $dependencyTokens = securelogPhpTokens($dependency);
+                        $unsupported = false;
+                        foreach ($dependencyTokens as $token) {
+                            if (in_array($token['id'], [T_NAMESPACE, T_CLASS, T_TRAIT, T_INTERFACE,
+                                T_IF, T_ELSEIF, T_SWITCH, T_FOR, T_FOREACH, T_WHILE, T_DO], true)) {
+                                $unsupported = true; break;
+                            }
+                        }
+                        if (!$unsupported) {
+                            foreach (securelogPhpCollectDefinitions($dependency) as $name => $body) {
+                                if (isset($definitions[$name])) $duplicates[$name] = true;
+                                else $definitions[$name] = $body;
+                            }
+                            $visit($resolved, $dependency, $depth + 1);
+                        }
+                    }
+                }
+            }
+            $at = securelogPhpNextToken($tokens, $end + 1);
+        }
+    };
+    $visit($fileName, $content, 0);
+    foreach ($duplicates as $name => $_) unset($definitions[$name]);
+    return $definitions;
+}
 
-    foreach ($lines as $index => $lineContent) {
+/**
+ * Tokenize real PHP syntax instead of scanning overlapping text windows.
+ * Token offsets uniquely identify events, including two events on one line.
+ */
+function securelogPhpTokens(string $content): array
+{
+    $result = [];
+    $line = 1;
+    foreach (token_get_all($content) as $token) {
+        if (is_array($token)) {
+            $id = $token[0];
+            $text = $token[1];
+            $tokenLine = $token[2];
+        } else {
+            $id = null;
+            $text = $token;
+            $tokenLine = $line;
+        }
+        $result[] = ['id' => $id, 'text' => $text, 'line' => $tokenLine];
+        $line = $tokenLine + substr_count($text, "\n");
+    }
+    return $result;
+}
 
-        $lineNumber = $index + 1;
+function securelogPhpNextToken(array $tokens, int $from): ?int
+{
+    for ($i = $from, $n = count($tokens); $i < $n; $i++) {
+        if (!in_array($tokens[$i]['id'], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+            return $i;
+        }
+    }
+    return null;
+}
 
-        $line = trim($lineContent);
+function securelogPhpMatchPair(array $tokens, int $start, string $open, string $close): ?int
+{
+    if (!isset($tokens[$start]) || $tokens[$start]['text'] !== $open) {
+        return null;
+    }
+    $depth = 0;
+    for ($i = $start, $n = count($tokens); $i < $n; $i++) {
+        if ($tokens[$i]['text'] === $open) {
+            $depth++;
+        } elseif ($tokens[$i]['text'] === $close && --$depth === 0) {
+            return $i;
+        }
+    }
+    return null;
+}
 
-        if ($line === '') {
+function securelogPhpSlice(array $tokens, int $start, int $end): string
+{
+    $text = '';
+    for ($i = $start; $i <= $end && isset($tokens[$i]); $i++) {
+        $text .= $tokens[$i]['text'];
+    }
+    return $text;
+}
+
+/** Extract only the body of an if/catch. Never include following else or statements. */
+function securelogPhpBodyBounds(array $tokens, int $afterCondition): ?array
+{
+    $start = securelogPhpNextToken($tokens, $afterCondition);
+    if ($start === null) {
+        return null;
+    }
+    if ($tokens[$start]['text'] === '{') {
+        $close = securelogPhpMatchPair($tokens, $start, '{', '}');
+        return $close === null ? null : [$start + 1, $close - 1, $close];
+    }
+
+    // Single-statement bodies: if ($bad) return false;
+    $paren = 0;
+    $bracket = 0;
+    for ($i = $start, $n = count($tokens); $i < $n; $i++) {
+        $ch = $tokens[$i]['text'];
+        if ($ch === '(') $paren++;
+        elseif ($ch === ')') $paren--;
+        elseif ($ch === '[') $bracket++;
+        elseif ($ch === ']') $bracket--;
+        elseif ($ch === ';' && $paren === 0 && $bracket === 0) {
+            return [$start, $i, $i];
+        }
+    }
+    return null;
+}
+
+/**
+ * Ignore code after a top-level return/throw/exit/die on the same path.
+ * This is deliberately lightweight; complex nested branches remain a limitation.
+ */
+function securelogPhpReachableBody(array $tokens, int $start, int $end): string
+{
+    $depth = 0;
+    $stop = $end;
+    for ($i = $start; $i <= $end; $i++) {
+        $id = $tokens[$i]['id'];
+        $ch = $tokens[$i]['text'];
+        if ($depth === 0 && (in_array($id, [T_RETURN, T_THROW, T_EXIT], true)
+            || ($id === T_STRING && strtolower($ch) === 'die'))) {
+            $stop = $i - 1;
+            break;
+        }
+        if ($ch === '{') $depth++;
+        elseif ($ch === '}') $depth--;
+    }
+    return $stop < $start ? '' : securelogPhpSlice($tokens, $start, $stop);
+}
+
+/** Detect actual logging calls, not fake call names inside strings/comments. */
+function securelogPhpHasActualSink(string $code, array $excludeFunctions = []): bool
+{
+    $tokens = securelogPhpTokens("<?php\n" . $code);
+    $methods = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency', 'log'];
+    $functions = ['error_log', 'syslog', 'logger'];
+
+    foreach ($tokens as $i => $token) {
+        if ($token['id'] !== T_STRING) continue;
+        $name = strtolower($token['text']);
+        $next = securelogPhpNextToken($tokens, $i + 1);
+        if ($next === null || $tokens[$next]['text'] !== '(') continue;
+        $prev = $i - 1;
+        while ($prev >= 0 && in_array($tokens[$prev]['id'], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) $prev--;
+        $prevId = $prev >= 0 ? $tokens[$prev]['id'] : null;
+        $prevText = $prev >= 0 ? $tokens[$prev]['text'] : '';
+
+        if (in_array($name, $functions, true)
+            && !in_array($name, $excludeFunctions, true)
+            && !in_array($prevId, [T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION], true)) return true;
+        if (in_array($name, $methods, true)
+            && in_array($prevId, [T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON], true)) {
+            // Method names alone are insufficient: e.g. $calculator->log(100)
+            // is a mathematical operation, not a security logging sink.
+            // Accept only clearly logger/audit-related receivers or Log:: facade.
+            $receiverAt = $prev - 1;
+            while ($receiverAt >= 0 && in_array($tokens[$receiverAt]['id'],
+                [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) $receiverAt--;
+            $receiver = $receiverAt >= 0 ? $tokens[$receiverAt]['text'] : '';
+            if (preg_match('/^(?:\$?(?:logger|log|audit|monolog)|\$?[A-Za-z_][A-Za-z0-9_]*(?:Logger|Log|Audit))$/', $receiver) === 1) return true;
+        }
+
+        if (in_array($name, ['file_put_contents', 'fwrite'], true)) {
+            $close = securelogPhpMatchPair($tokens, $next, '(', ')');
+            if ($close !== null) {
+                $args = securelogPhpSlice($tokens, $next + 1, $close - 1);
+                if (preg_match('/(?:log|audit|security|message|event)/i', $args) === 1) return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Collect same-file named function and method implementations.
+ * Duplicate names are deliberately excluded: without a reliable receiver/class
+ * binding, choosing one implementation would be an unsafe assumption.
+ */
+function securelogPhpCollectDefinitions(string $content): array
+{
+    $tokens = securelogPhpTokens($content);
+    $definitions = [];
+    $duplicates = [];
+    $n = count($tokens);
+
+    for ($i = 0; $i < $n; $i++) {
+        if ($tokens[$i]['id'] !== T_FUNCTION) continue;
+        $nameAt = securelogPhpNextToken($tokens, $i + 1);
+        if ($nameAt === null) continue;
+        // Skip the optional reference marker in function &name(...).
+        if ($tokens[$nameAt]['text'] === '&') $nameAt = securelogPhpNextToken($tokens, $nameAt + 1);
+        if ($nameAt === null || $tokens[$nameAt]['id'] !== T_STRING) continue;
+        $name = strtolower($tokens[$nameAt]['text']);
+        $paramsOpen = securelogPhpNextToken($tokens, $nameAt + 1);
+        if ($paramsOpen === null || $tokens[$paramsOpen]['text'] !== '(') continue;
+        $paramsClose = securelogPhpMatchPair($tokens, $paramsOpen, '(', ')');
+        if ($paramsClose === null) continue;
+        $bodyOpen = securelogPhpNextToken($tokens, $paramsClose + 1);
+        // Support return type declarations, including nullable/union types.
+        while ($bodyOpen !== null && $bodyOpen < $n &&
+               $tokens[$bodyOpen]['text'] !== '{' && $tokens[$bodyOpen]['text'] !== ';') {
+            $bodyOpen = securelogPhpNextToken($tokens, $bodyOpen + 1);
+        }
+        if ($bodyOpen === null || $tokens[$bodyOpen]['text'] !== '{') continue;
+        $bodyClose = securelogPhpMatchPair($tokens, $bodyOpen, '{', '}');
+        if ($bodyClose === null) continue;
+        if (isset($definitions[$name])) $duplicates[$name] = true;
+        // Analyze only code reachable before a top-level return/throw/exit.
+        // A wrapper such as `return true; error_log($message);` must not
+        // produce a false Security Logging PASS from dead code.
+        $definitions[$name] = securelogPhpReachableBody($tokens, $bodyOpen + 1, $bodyClose - 1);
+        $i = $bodyClose;
+    }
+    foreach ($duplicates as $name => $_) unset($definitions[$name]);
+    return $definitions;
+}
+
+/**
+ * Bounded, cycle-safe same-file call resolution. Only a real recognized sink
+ * inside a reachable wrapper body can confirm logging. No name-based PASS.
+ * This is intentionally a lightweight approximation, not full call-graph/CFG.
+ * @return array{status:string,indirect:bool,context:string}
+ */
+function securelogPhpResolveSink(string $code, array $definitions, array $visited = [], int $depth = 0): array
+{
+    if (securelogPhpHasActualSink($code, array_keys($definitions))) {
+        return ['status' => 'PASS', 'indirect' => $depth > 0, 'context' => $code];
+    }
+    if ($depth >= 6) return ['status' => 'N/A', 'indirect' => true, 'context' => ''];
+
+    $tokens = securelogPhpTokens('<?php ' . $code);
+    $unknown = false;
+    foreach ($tokens as $i => $token) {
+        if ($token['id'] !== T_STRING) continue;
+        $name = strtolower($token['text']);
+        $next = securelogPhpNextToken($tokens, $i + 1);
+        if ($next === null || $tokens[$next]['text'] !== '(') continue;
+        $prev = $i - 1;
+        while ($prev >= 0 && in_array($tokens[$prev]['id'], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) $prev--;
+        if ($prev >= 0 && in_array($tokens[$prev]['id'], [T_FUNCTION, T_NEW], true)) continue;
+        if (isset($definitions[$name])) {
+            if (isset($visited[$name])) { $unknown = true; continue; }
+            $nextVisited = $visited;
+            $nextVisited[$name] = true;
+            $resolved = securelogPhpResolveSink($definitions[$name], $definitions, $nextVisited, $depth + 1);
+            if ($resolved['status'] === 'PASS') {
+                $definitionTokens = securelogPhpTokens('<?php ' . $definitions[$name]);
+                $hasBranches = false;
+                foreach ($definitionTokens as $definitionToken) {
+                    if (in_array($definitionToken['id'], [T_IF, T_ELSEIF, T_SWITCH,
+                        T_FOR, T_FOREACH, T_WHILE, T_DO, T_TRY, T_MATCH], true)) {
+                        $hasBranches = true;
+                        break;
+                    }
+                }
+                if ($hasBranches && securelogPhpAssessLoggingPaths($definitions[$name], []) !== 'PASS') {
+                    $unknown = true;
+                    continue;
+                }
+                // Include the call-site and actual implementation for policy review.
+                return ['status' => 'PASS', 'indirect' => true,
+                        'context' => $code . "\n" . $resolved['context']];
+            }
+            if ($resolved['status'] === 'N/A') $unknown = true;
+        } elseif (preg_match('/(?:log|audit|record.*event|security.*event)/i', $name)) {
+            // External custom logger: its implementation is not in this file.
+            $unknown = true;
+        }
+    }
+    return ['status' => $unknown ? 'N/A' : 'FAIL', 'indirect' => $depth > 0, 'context' => $code];
+}
+
+/**
+ * Lightweight path-sensitive assessment of logging within ONE security-event
+ * body. PASS requires a verified sink on every supported path. FAIL requires
+ * at least one demonstrably unlogged path. Unsupported constructs are N/A.
+ *
+ * This is deliberately NOT a full interprocedural control-flow graph.
+ */
+function securelogPhpAssessLoggingPaths(string $code, array $definitions): string
+{
+    $tokens = securelogPhpTokens("<?php\n" . $code);
+    $paths = securelogPhpFlowWalk($tokens, 0, count($tokens) - 1,
+        $definitions, [['logged' => false, 'unknown' => false, 'ended' => false]], 0);
+
+    if ($paths === null || $paths === []) return 'N/A';
+    $unknown = false;
+    foreach ($paths as $path) {
+        if (!$path['logged']) {
+            if (!$path['unknown']) return 'FAIL';
+            $unknown = true;
+        }
+    }
+    return $unknown ? 'N/A' : 'PASS';
+}
+
+/** Read one if/elseif/else chain, returning its branch bodies and next token. */
+function securelogPhpFlowIfChain(array $tokens, int $start, int $end): ?array
+{
+    $branches = [];
+    $cursor = $start;
+    $hasElse = false;
+    while ($cursor <= $end) {
+        $id = $tokens[$cursor]['id'];
+        if ($id === T_ELSE) {
+            $bounds = securelogPhpBodyBounds($tokens, $cursor + 1);
+            if ($bounds === null) return null;
+            $branches[] = [$bounds[0], $bounds[1]];
+            $cursor = $bounds[2] + 1;
+            $hasElse = true;
+            break;
+        }
+        if ($id !== T_IF && $id !== T_ELSEIF) return null;
+        $open = securelogPhpNextToken($tokens, $cursor + 1);
+        if ($open === null || $tokens[$open]['text'] !== '(') return null;
+        $close = securelogPhpMatchPair($tokens, $open, '(', ')');
+        if ($close === null) return null;
+        $bounds = securelogPhpBodyBounds($tokens, $close + 1);
+        if ($bounds === null) return null;
+        $branches[] = [$bounds[0], $bounds[1]];
+        $cursor = securelogPhpNextToken($tokens, $bounds[2] + 1);
+        if ($cursor === null) { $cursor = $end + 1; break; }
+        if ($cursor > $end || !in_array($tokens[$cursor]['id'], [T_ELSEIF, T_ELSE], true)) break;
+    }
+    if (!$hasElse) $branches[] = null; // Condition(s) can all be false.
+    return ['branches' => $branches, 'next' => $cursor];
+}
+
+/**
+ * Walk a bounded token range and carry the logged/unknown state for each path.
+ * A return/throw/exit terminates only the path on which it executes.
+ */
+function securelogPhpFlowWalk(array $tokens, int $start, int $end,
+    array $definitions, array $paths, int $depth): ?array
+{
+    if ($depth > 16 || count($paths) > 128) return null;
+    $i = $start;
+    while ($i <= $end) {
+        $at = securelogPhpNextToken($tokens, $i);
+        if ($at === null || $at > $end) break;
+        $id = $tokens[$at]['id'];
+        $ch = $tokens[$at]['text'];
+        if ($id === T_OPEN_TAG || $ch === ';') { $i = $at + 1; continue; }
+
+        if ($id === T_IF) {
+            $chain = securelogPhpFlowIfChain($tokens, $at, $end);
+            if ($chain === null) return null;
+            $nextPaths = [];
+            foreach ($chain['branches'] as $branch) {
+                if ($branch === null) {
+                    $branchPaths = $paths;
+                } else {
+                    $branchPaths = securelogPhpFlowWalk($tokens, $branch[0], $branch[1],
+                        $definitions, $paths, $depth + 1);
+                }
+                if ($branchPaths === null) return null;
+                array_push($nextPaths, ...$branchPaths);
+            }
+            $paths = $nextPaths;
+            if (count($paths) > 128) return null;
+            $i = $chain['next'];
             continue;
         }
 
-
-        /*
-         * Security conditions may span multiple lines.
-         */
-        $eventWindow = getPhpEventWindow(
-            $lines,
-            $index,
-            8
-        );
-
-
-        /* =====================================================
-           EVENT 1
-           AUTHENTICATION FAILURE
-           ===================================================== */
-
-        if (isPhpAuthenticationFailure($eventWindow)) {
-
-            $eventKey = 'AUTH:' . $lineNumber;
-
-            if (!isset($reportedEvents[$eventKey])) {
-
-                $context = getPhpAnalysisContext(
-                    $lines,
-                    $index,
-                    40,
-                    20
-                );
-
-                analyzePhpSecurityEventStatus(
-                    $results,
-                    $fileName,
-                    $lineNumber,
-                    $context,
-
-                    77801,
-                    'Authentication Failure',
-
-                    'SecureLog detected an authentication failure path without an associated security logging operation.',
-
-                    'Record failed authentication attempts using an appropriate security logging mechanism. Do not log passwords, tokens, or credentials.'
-                );
-
-                $reportedEvents[$eventKey] = true;
-            }
+        if ($ch === '{') {
+            $close = securelogPhpMatchPair($tokens, $at, '{', '}');
+            if ($close === null) return null;
+            $paths = securelogPhpFlowWalk($tokens, $at + 1, $close - 1,
+                $definitions, $paths, $depth + 1);
+            if ($paths === null) return null;
+            $i = $close + 1;
+            continue;
         }
 
-
-        /* =====================================================
-           EVENT 2
-           ACCESS CONTROL FAILURE
-           ===================================================== */
-
-        if (isPhpAccessControlFailure($eventWindow)) {
-
-            $eventKey = 'ACCESS:' . $lineNumber;
-
-            if (!isset($reportedEvents[$eventKey])) {
-
-                $context = getPhpAnalysisContext(
-                    $lines,
-                    $index,
-                    40,
-                    20
-                );
-
-                analyzePhpSecurityEventStatus(
-                    $results,
-                    $fileName,
-                    $lineNumber,
-                    $context,
-
-                    77802,
-                    'Access Control Failure',
-
-                    'SecureLog detected an access-control denial or authorization failure without an associated security logging operation.',
-
-                    'Record denied or unauthorized access attempts using an appropriate security logging mechanism.'
-                );
-
-                $reportedEvents[$eventKey] = true;
+        // Loops, switch, try/catch, declarations and other compound forms
+        // require richer CFG semantics. They must never yield a guessed PASS.
+        if (in_array($id, [T_FOR, T_FOREACH, T_WHILE, T_DO, T_SWITCH,
+            T_TRY, T_CATCH, T_FUNCTION, T_FN, T_MATCH], true)) {
+            foreach ($paths as &$path) {
+                if (!$path['ended'] && !$path['logged']) $path['unknown'] = true;
             }
+            unset($path);
+            // We cannot safely identify a complete compound statement here.
+            // Return N/A unless a prior unconditional sink covered all paths.
+            return $paths;
         }
 
+        // Ordinary expression or return statement: locate the ending semicolon.
+        $paren = 0; $bracket = 0; $curly = 0;
+        $stop = null;
+        for ($j = $at; $j <= $end; $j++) {
+            $t = $tokens[$j]['text'];
+            if ($t === '(') $paren++;
+            elseif ($t === ')') $paren--;
+            elseif ($t === '[') $bracket++;
+            elseif ($t === ']') $bracket--;
+            elseif ($t === '{') $curly++;
+            elseif ($t === '}') $curly--;
+            if ($t === ';' && $paren === 0 && $bracket === 0 && $curly === 0) {
+                $stop = $j; break;
+            }
+        }
+        if ($stop === null) return null;
+        $statement = securelogPhpSlice($tokens, $at, $stop);
+        $resolved = securelogPhpResolveSink($statement, $definitions);
+        $terminates = in_array($id, [T_RETURN, T_THROW, T_EXIT], true)
+            || ($id === T_STRING && strtolower($ch) === 'die');
+        // A ternary/short-circuit expression may bypass its embedded logger.
+        $conditionalExpression = preg_match('/\\?|&&|\\|\\||\\band\\b|\\bor\\b/i', $statement) === 1;
+        foreach ($paths as &$path) {
+            if ($path['ended']) continue;
+            if ($resolved['status'] === 'PASS') {
+                if ($conditionalExpression) $path['unknown'] = true;
+                else $path['logged'] = true;
+            } elseif ($resolved['status'] === 'N/A') {
+                $path['unknown'] = true;
+            }
+            if ($terminates) $path['ended'] = true;
+        }
+        unset($path);
+        $i = $stop + 1;
+    }
+    return $paths;
+}
 
-        /* =====================================================
-           EVENT 3
-           EXCEPTION HANDLING
-           ===================================================== */
+/**
+ * Only explicit, directly inspectable storage destinations count as evidence.
+ * An ordinary error_log($message) has an environment-configured destination.
+ * @return array{status:string,description:string}
+ */
+function securelogPhpStorageEvidence(string $code): array
+{
+    $tokens = securelogPhpTokens('<?php ' . $code);
+    foreach ($tokens as $i => $token) {
+        if ($token['id'] !== T_STRING) continue;
+        $name = strtolower($token['text']);
+        if (!in_array($name, ['file_put_contents', 'fopen', 'error_log'], true)) continue;
+        $open = securelogPhpNextToken($tokens, $i + 1);
+        if ($open === null || $tokens[$open]['text'] !== '(') continue;
+        $close = securelogPhpMatchPair($tokens, $open, '(', ')');
+        if ($close === null) continue;
+        $args = securelogPhpSlice($tokens, $open + 1, $close - 1);
+        if ($name === 'error_log') {
+            // error_log(message, 3, destination) only; otherwise config unknown.
+            if (!preg_match('/^.+?,\s*3\s*,\s*([\'\"])([^\'\"]+)\1/s', $args, $m)) continue;
+            $path = $m[2];
+        } else {
+            if (!preg_match('/^\s*([\'\"])([^\'\"]+)\1/s', $args, $m)) continue;
+            $path = $m[2];
+            if (!preg_match('/(?:log|audit|security|event)/i', $path)) continue;
+        }
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        if ($extension === 'txt') return ['status' => 'PASS', 'description' => 'Explicit approved .txt log destination detected.'];
+        return ['status' => 'FAIL', 'description' => 'Explicit log destination does not meet the SecureLog .txt policy: ' . basename($path) . '.'];
+    }
+    return ['status' => 'N/A', 'description' => 'The actual log destination cannot be established from this event and its resolved logger implementation.'];
+}
 
-        if (isPhpExceptionHandling($eventWindow)) {
+/** Identify only clearly unprotected direct literal or raw-superglobal writes. */
+function securelogPhpExplicitPlaintextWrite(string $code): bool
+{
+    return preg_match('/\bfile_put_contents\s*\(\s*[\'\"][^\'\"]*(?:log|audit|security|event)[^\'\"]*[\'\"]\s*,\s*(?:[\'\"]|\$_(?:POST|GET|REQUEST|COOKIE)\s*\[)/i', $code) === 1;
+}
 
-            $eventKey = 'EXCEPTION:' . $lineNumber;
+/**
+ * Discover supported security paths once per syntactic condition/catch.
+ * The original isPhp*() patterns remain the event vocabulary.
+ */
+function securelogPhpDiscoverEvents(string $content): array
+{
+    $tokens = securelogPhpTokens($content);
+    $events = [];
+    $seen = [];
+    $coveredDenials = [];
+    $n = count($tokens);
 
-            if (!isset($reportedEvents[$eventKey])) {
+    for ($i = 0; $i < $n; $i++) {
+        $id = $tokens[$i]['id'];
+        if (!in_array($id, [T_IF, T_ELSEIF, T_CATCH], true)) {
+            continue;
+        }
+        $open = securelogPhpNextToken($tokens, $i + 1);
+        if ($open === null || $tokens[$open]['text'] !== '(') continue;
+        $close = securelogPhpMatchPair($tokens, $open, '(', ')');
+        if ($close === null) continue;
+        $bounds = securelogPhpBodyBounds($tokens, $close + 1);
+        if ($bounds === null) continue;
+        [$bodyStart, $bodyEnd, $bodyFinish] = $bounds;
+        $condition = securelogPhpSlice($tokens, $open + 1, $close - 1);
+        // Keep the full event body: nested single-statement returns are not
+        // necessarily unconditional. Path analysis handles reachability.
+        $body = securelogPhpSlice($tokens, $bodyStart, $bodyEnd);
 
-                $context = getPhpAnalysisContext(
-                    $lines,
-                    $index,
-                    50,
-                    20
-                );
-
-                analyzePhpSecurityEventStatus(
-                    $results,
-                    $fileName,
-                    $lineNumber,
-                    $context,
-
-                    77803,
-                    'Exception Handling',
-
-                    'SecureLog detected exception handling without an associated logging operation.',
-
-                    'Record security-relevant or operational exceptions using an appropriate logger while avoiding sensitive information.'
-                );
-
-                $reportedEvents[$eventKey] = true;
+        if ($id === T_CATCH) {
+            $rules = [77803];
+        } else {
+            $rules = [];
+            $isAuth = isPhpAuthenticationFailure($condition);
+            if ($isAuth) $rules[] = 77801;
+            // A 403 response inside a failed-login path is not, by itself,
+            // a second independent authorization event.
+            if (isPhpAccessControlFailure($condition)
+                || (!$isAuth && isPhpAccessControlFailure($body))) $rules[] = 77802;
+        }
+        foreach ($rules as $rule) {
+            $key = $rule . ':' . $i;
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+            $events[] = [
+                'rule' => $rule,
+                'line' => $tokens[$i]['line'],
+                'body' => $body,
+            ];
+            if ($rule === 77802) {
+                for ($j = $bodyStart; $j <= $bodyFinish; $j++) $coveredDenials[$j] = true;
             }
         }
     }
 
-
-    /*
-     * ---------------------------------------------------------
-     * NO SECURITY EVENT DETECTED
-     * ---------------------------------------------------------
-     *
-     * This is NOT CWE-778.
-     *
-     * CWE-778 should only be evaluated when SecureLog detects
-     * a security-relevant event that should be logged.
-     */
-    if (empty($results)) {
-
-        $results[] = createPhpCheckResult(
-            'N/A',
-            'Security Logging',
-            null,
-            'CWE-778',
-            'INFO',
-            $fileName,
-            0,
-
-            'No supported security event was detected in this PHP file.',
-
-            'No CWE-778 conclusion was produced because SecureLog did not identify an authentication failure, access-control failure, or exception-handling event.'
-        );
-
-        $results[] = createPhpCheckResult(
-            'N/A',
-            'Log Neutralization',
-            null,
-            'CWE-117',
-            'INFO',
-            $fileName,
-            0,
-
-            'Log neutralization was not evaluated because no supported security event was detected.'
-        );
-
-        $results[] = createPhpCheckResult(
-            'N/A',
-            'Log Storage',
-            null,
-            'SecureLog Policy',
-            'INFO',
-            $fileName,
-            0,
-
-            'Log storage was not evaluated because no supported security event was detected.'
-        );
-
-        $results[] = createPhpCheckResult(
-            'N/A',
-            'Log Protection',
-            null,
-            'SecureLog Policy',
-            'INFO',
-            $fileName,
-            0,
-
-            'Log protection was not evaluated because no supported security event was detected.'
-        );
+    // Preserve detection of standalone abort(403) / http_response_code(403).
+    for ($i = 0; $i < $n; $i++) {
+        if ($tokens[$i]['id'] !== T_STRING || isset($coveredDenials[$i])) continue;
+        if (!in_array(strtolower($tokens[$i]['text']), ['abort', 'http_response_code'], true)) continue;
+        $open = securelogPhpNextToken($tokens, $i + 1);
+        if ($open === null || $tokens[$open]['text'] !== '(') continue;
+        $close = securelogPhpMatchPair($tokens, $open, '(', ')');
+        if ($close === null || trim(securelogPhpSlice($tokens, $open + 1, $close - 1)) !== '403') continue;
+        $events[] = ['rule' => 77802, 'line' => $tokens[$i]['line'], 'body' => ''];
     }
 
-
-    return $results;
+    usort($events, static fn(array $a, array $b): int => $a['line'] <=> $b['line']);
+    return $events;
 }
 
 
@@ -344,7 +783,8 @@ function analyzePhpSecurityEventStatus(
     int $cwe778RuleId,
     string $eventName,
     string $cwe778FailureDescription,
-    string $cwe778Recommendation
+    string $cwe778Recommendation,
+    ?array $sinkEvidence = null
 ): void {
 
 
@@ -353,10 +793,15 @@ function analyzePhpSecurityEventStatus(
        SECURITY LOGGING — CWE-778
        ========================================================= */
 
-    $hasLogSink = hasPhpLogSink($context);
+    $sinkEvidence = $sinkEvidence ?? [
+        'status' => securelogPhpHasActualSink($context) ? 'PASS' : 'FAIL',
+        'indirect' => false, 'context' => $context
+    ];
+    $loggingStatus = $sinkEvidence['status'];
+    $effectiveContext = $sinkEvidence['context'];
 
 
-    if (!$hasLogSink) {
+    if ($loggingStatus !== 'PASS') {
 
         /*
          * FAIL
@@ -365,24 +810,35 @@ function analyzePhpSecurityEventStatus(
          */
 
         $results[] = createPhpCheckResult(
-            'FAIL',
+            $loggingStatus,
             'Security Logging',
-            $cwe778RuleId,
+            $loggingStatus === 'FAIL' ? $cwe778RuleId : null,
             'CWE-778',
             (
-                $cwe778RuleId === 77803
+                $loggingStatus === 'N/A' ? 'INFO' : ($cwe778RuleId === 77803
                     ? 'MEDIUM'
-                    : 'HIGH'
+                    : 'HIGH')
             ),
             $fileName,
             $lineNumber,
 
-            $eventName . ': ' .
-            $cwe778FailureDescription,
+            $loggingStatus === 'N/A'
+                ? (!empty($sinkEvidence['path_uncertain'])
+                    ? $eventName . ': logging was found, but complete path coverage could not be verified.'
+                    : $eventName . ': a potential external logging wrapper was found, but its implementation could not be verified in this file.')
+                : (!empty($sinkEvidence['path_gap'])
+                    ? $eventName . ': a logging operation exists, but at least one reachable event path can bypass it.'
+                    : $eventName . ': ' . $cwe778FailureDescription),
 
-            $cwe778Recommendation
+            $loggingStatus === 'N/A' ? 'Include the logger implementation in a project-folder scan to verify this call.' : $cwe778Recommendation
         );
 
+
+        $dependentReason = !empty($sinkEvidence['path_gap'])
+            ? 'Not evaluated because logging can be bypassed on this security-event path.'
+            : (!empty($sinkEvidence['path_uncertain'])
+                ? 'Not evaluated because logging path coverage could not be verified.'
+                : 'Not evaluated because no security logging operation exists for this event.');
 
         /*
          * CWE-117 cannot be evaluated because there is
@@ -398,7 +854,7 @@ function analyzePhpSecurityEventStatus(
             $fileName,
             $lineNumber,
 
-            'Not evaluated because no security logging operation exists for this event.'
+            $dependentReason
         );
 
 
@@ -416,7 +872,7 @@ function analyzePhpSecurityEventStatus(
             $fileName,
             $lineNumber,
 
-            'Not evaluated because no security logging operation exists for this event.'
+            $dependentReason
         );
 
 
@@ -434,7 +890,7 @@ function analyzePhpSecurityEventStatus(
             $fileName,
             $lineNumber,
 
-            'Not evaluated because no security logging operation exists for this event.'
+            $dependentReason
         );
 
 
@@ -460,6 +916,14 @@ function analyzePhpSecurityEventStatus(
     );
 
 
+
+    // The current data-flow analyzer cannot prove parameter propagation through
+    // arbitrary custom wrappers. Do not report a misleading CWE-117 PASS.
+    if ($sinkEvidence['indirect']) {
+        $results[] = createPhpCheckResult('N/A', 'Log Neutralization', null,
+            'CWE-117', 'INFO', $fileName, $lineNumber,
+            'Custom logger resolved, but argument-to-sink neutralization flow was not verified.');
+    } else {
 
     /* =========================================================
        CHECK 2
@@ -561,47 +1025,22 @@ function analyzePhpSecurityEventStatus(
 
 
 
+    } // End direct-sink neutralization assessment.
+
     /* =========================================================
        CHECK 3
        LOG STORAGE — SECURELOG .TXT POLICY
        ========================================================= */
 
-    $hasTxtStorage = hasPhpTxtLogTarget(
-        $context
+    $storage = securelogPhpStorageEvidence($effectiveContext);
+    $storageStatus = $storage['status'];
+    $results[] = createPhpCheckResult(
+        $storageStatus, 'Log Storage',
+        $storageStatus === 'FAIL' ? 90001 : null,
+        'SecureLog Policy', $storageStatus === 'FAIL' ? 'MEDIUM' : 'INFO',
+        $fileName, $lineNumber, $storage['description'],
+        $storageStatus === 'FAIL' ? 'Use an approved .txt log destination under the project-specific storage policy.' : ''
     );
-
-
-    if ($hasTxtStorage) {
-
-        $results[] = createPhpCheckResult(
-            'PASS',
-            'Log Storage',
-            null,
-            'SecureLog Policy',
-            'INFO',
-            $fileName,
-            $lineNumber,
-
-            'Approved .txt log storage was detected.'
-        );
-
-    } else {
-
-        $results[] = createPhpCheckResult(
-            'FAIL',
-            'Log Storage',
-            90001,
-            'SecureLog Policy',
-            'MEDIUM',
-            $fileName,
-            $lineNumber,
-
-            'Log is not stored using the approved .txt storage policy.',
-
-            'Use an approved .txt log target according to the SecureLog project logging policy.'
-        );
-    }
-
 
 
     /* =========================================================
@@ -616,47 +1055,28 @@ function analyzePhpSecurityEventStatus(
      * actually reaches LOG_SINK.
      */
 
-    $encryptionFlow = findPhpEncryptionToLogFlow(
-        $context
-    );
-
+    $encryptionFlow = $sinkEvidence['indirect']
+        ? ['encrypted' => false]
+        : findPhpEncryptionToLogFlow($context);
 
     if ($encryptionFlow['encrypted']) {
-
-        $results[] = createPhpCheckResult(
-            'PASS',
-            'Log Protection',
-            null,
-            'SecureLog Policy',
-            'INFO',
-            $fileName,
-            (
-                isset($encryptionFlow['sink_line'])
-                &&
-                $encryptionFlow['sink_line'] > 0
-                    ? $encryptionFlow['sink_line']
-                    : $lineNumber
-            ),
-
-            'Log data protection or encryption was detected before the data reached the logging operation.'
-        );
-
+        $protectionStatus = 'PASS';
+        $protectionDescription = 'Recognized encryption flow to the logging operation was detected in this event.';
+    } elseif (!$sinkEvidence['indirect'] && securelogPhpExplicitPlaintextWrite($context)) {
+        $protectionStatus = 'FAIL';
+        $protectionDescription = 'Explicit direct plaintext write to a log file was detected without a protection step.';
     } else {
-
-        $results[] = createPhpCheckResult(
-            'FAIL',
-            'Log Protection',
-            90002,
-            'SecureLog Policy',
-            'MEDIUM',
-            $fileName,
-            $lineNumber,
-
-            'Log data is not encrypted or otherwise protected before storage.',
-
-            'Encrypt or otherwise protect log data before writing it to the approved log file. Keep encryption keys separate from stored log data.'
-        );
+        $protectionStatus = 'N/A';
+        $protectionDescription = 'Protection at the logging destination or archive layer cannot be verified from this event.';
     }
+
+    $results[] = createPhpCheckResult(
+        $protectionStatus, 'Log Protection',
+        $protectionStatus === 'FAIL' ? 90002 : null,
+        'SecureLog Policy', $protectionStatus === 'FAIL' ? 'MEDIUM' : 'INFO',
+        $fileName, $lineNumber, $protectionDescription,
+        $protectionStatus === 'FAIL' ? 'Apply the project-required protection before storing the log, or use a verifiably protected logging service.' : ''
+    );
 }
 
 

@@ -1,6 +1,13 @@
 # Email / SMTP credentials
 /Notification/email_config.php
 
+# Local database credentials (copy connection.example.php for setup)
+/Engine_Process/connection.php
+
+# Private application audit logs
+/Dashboard/logs/*
+!/Dashboard/logs/.htaccess
+
 # Environment secrets
 .env
 .env.*
