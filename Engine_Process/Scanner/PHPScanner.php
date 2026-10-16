@@ -665,38 +665,92 @@ function securelogPhpFlowWalk(array $tokens, int $start, int $end,
  * An ordinary error_log($message) has an environment-configured destination.
  * @return array{status:string,description:string}
  */
-function securelogPhpStorageEvidence(string $code): array
+/** Split actual call arguments without treating commas in strings as separators. */
+function securelogPhpCallArguments(array $tokens, int $open, int $close): array
+{
+    $args = [];
+    $start = $open + 1;
+    $depth = 0;
+    for ($i = $start; $i < $close; $i++) {
+        $text = $tokens[$i]['text'];
+        if ($tokens[$i]['id'] !== null) continue;
+        if (in_array($text, ['(', '[', '{'], true)) $depth++;
+        elseif (in_array($text, [')', ']', '}'], true)) $depth--;
+        elseif ($text === ',' && $depth === 0) {
+            $args[] = trim(securelogPhpSlice($tokens, $start, $i - 1));
+            $start = $i + 1;
+        }
+    }
+    $args[] = trim(securelogPhpSlice($tokens, $start, $close - 1));
+    return $args;
+}
+
+/** Actual built-in calls only; text in comments/strings is never a call. */
+function securelogPhpBuiltinCalls(string $code): array
 {
     $tokens = securelogPhpTokens('<?php ' . $code);
+    $calls = [];
     foreach ($tokens as $i => $token) {
         if ($token['id'] !== T_STRING) continue;
-        $name = strtolower($token['text']);
-        if (!in_array($name, ['file_put_contents', 'fopen', 'error_log'], true)) continue;
+        $previous = $i - 1;
+        while ($previous >= 0 && in_array($tokens[$previous]['id'],
+            [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) $previous--;
+        if ($previous >= 0 && in_array($tokens[$previous]['id'],
+            [T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION, T_NEW], true)) continue;
         $open = securelogPhpNextToken($tokens, $i + 1);
         if ($open === null || $tokens[$open]['text'] !== '(') continue;
         $close = securelogPhpMatchPair($tokens, $open, '(', ')');
         if ($close === null) continue;
-        $args = securelogPhpSlice($tokens, $open + 1, $close - 1);
+        $calls[] = ['name' => strtolower($token['text']),
+            'args' => securelogPhpCallArguments($tokens, $open, $close), 'line' => $token['line']];
+    }
+    return $calls;
+}
+
+/** Resolve literal strings and __DIR__ suffixes only, never filesystem paths. */
+function securelogPhpStaticLogPath(string $expression): ?string
+{
+    $parts = array_values(array_filter(securelogPhpTokens('<?php ' . $expression),
+        static fn(array $token): bool => !in_array($token['id'],
+            [T_OPEN_TAG, T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)));
+    if (count($parts) === 3 && $parts[0]['id'] === T_DIR && $parts[1]['text'] === '.') {
+        $parts = [$parts[2]];
+    }
+    if (count($parts) !== 1 || $parts[0]['id'] !== T_CONSTANT_ENCAPSED_STRING) return null;
+    $literal = $parts[0]['text'];
+    $value = substr($literal, 1, -1);
+    // Leave escaped/interpolated expressions unresolved rather than guessing.
+    return str_contains($value, '\\') ? null : $value;
+}
+
+function securelogPhpStorageEvidence(string $code): array
+{
+    $approved = false;
+    foreach (securelogPhpBuiltinCalls($code) as $call) {
+        $name = $call['name'];
+        if (!in_array($name, ['file_put_contents', 'fopen', 'error_log'], true)) continue;
+        $args = $call['args'];
         if ($name === 'error_log') {
             // error_log(message, 3, destination) only; otherwise config unknown.
-            if (!preg_match('/^.+?,\s*3\s*,\s*([\'\"])([^\'\"]+)\1/s', $args, $m)) continue;
-            $path = $m[2];
+            if (trim($args[1] ?? '') !== '3') continue;
+            $path = securelogPhpStaticLogPath($args[2] ?? '');
         } else {
-            if (!preg_match('/^\s*([\'\"])([^\'\"]+)\1/s', $args, $m)) continue;
-            $path = $m[2];
-            if (!preg_match('/(?:log|audit|security|event)/i', $path)) continue;
+            $path = securelogPhpStaticLogPath($args[0] ?? '');
+            if ($path !== null && !preg_match('/(?:log|audit|security|event)/i', $path)) continue;
         }
+        if ($path === null) continue;
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        if ($extension === 'txt') return ['status' => 'PASS', 'description' => 'Explicit approved .txt log destination detected.'];
+        if ($extension === 'txt') { $approved = true; continue; }
         return ['status' => 'FAIL', 'description' => 'Explicit log destination does not meet the SecureLog .txt policy: ' . basename($path) . '.'];
     }
+    if ($approved) return ['status' => 'PASS', 'description' => 'Explicit approved .txt log destination detected.'];
     return ['status' => 'N/A', 'description' => 'The actual log destination cannot be established from this event and its resolved logger implementation.'];
 }
 
 /** Identify only clearly unprotected direct literal or raw-superglobal writes. */
 function securelogPhpExplicitPlaintextWrite(string $code): bool
 {
-    return preg_match('/\bfile_put_contents\s*\(\s*[\'\"][^\'\"]*(?:log|audit|security|event)[^\'\"]*[\'\"]\s*,\s*(?:[\'\"]|\$_(?:POST|GET|REQUEST|COOKIE)\s*\[)/i', $code) === 1;
+    return findPhpEncryptionToLogFlow($code)['plaintext'];
 }
 
 /**
