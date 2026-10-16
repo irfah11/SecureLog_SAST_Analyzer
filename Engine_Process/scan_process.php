@@ -80,6 +80,8 @@ require_once __DIR__ . '/../Dashboard/ActivityLogger.php';
 
 
 
+require_once __DIR__ . '/ScanPresentation.php';
+
 require_once __DIR__ . '/Scanner/ScannerEngine.php';
 
 require_once __DIR__ . '/Scanner/PHPScanner.php';
@@ -1883,6 +1885,8 @@ $findingsSaved = 0;
 $phpProjectSources = [];
 $duplicateSourcePaths = [];
 $coverageWithoutEvents = [];
+$coverageFiles = [];
+$coverageEvents = [];
 if ($language === 'php') {
     foreach ($validUploadIndexes as $sourceIndex) {
         $sourceTmp = (string) ($tmpNames[$sourceIndex] ?? '');
@@ -1952,6 +1956,10 @@ foreach (
     $fileName = $uploadMode === 'folder'
         ? $relativePaths[$index]
         : cleanUploadedFileName($originalFileName);
+    $coverageFiles[$index] = ['file' => $fileName, 'status' => 'rejected',
+        'reason' => 'File validation failed; see scan processing notes.', 'checks' => 0,
+        'saved_checks' => 0, 'event_count' => null];
+
 
 
 
@@ -2354,6 +2362,8 @@ foreach (
         )
 
     ) {
+        $coverageFiles[$index]['status'] = 'unsupported';
+        $coverageFiles[$index]['reason'] = 'Extension does not match the selected language.';
 
 
 
@@ -2536,6 +2546,8 @@ foreach (
 
 
     $validatedFiles++;
+    $coverageFiles[$index]['status'] = 'analysis_failed';
+    $coverageFiles[$index]['reason'] = 'Scanner did not return usable check results; see processing notes.';
 
 
 
@@ -2745,6 +2757,9 @@ foreach (
     if ($language === 'php' && $findings === []) {
         $analyzedFiles++;
         $coverageWithoutEvents[] = $fileName;
+        $coverageFiles[$index]['status'] = 'no_events';
+        $coverageFiles[$index]['event_count'] = 0;
+        $coverageFiles[$index]['reason'] = 'Analyzed: no supported security event detected. This does not establish that logging is unnecessary.';
         continue;
     }
 
@@ -2827,6 +2842,12 @@ foreach (
 
 
     $analyzedFiles++;
+    $coverageFiles[$index]['status'] = 'analyzed';
+    $coverageFiles[$index]['reason'] = 'Analysis returned security checks.';
+    $coverageFiles[$index]['checks'] = count($findings);
+    if ($language === 'php') {
+        $coverageFiles[$index]['event_count'] = count(array_unique(array_column($findings, 'event_key')));
+    }
 
 
 
@@ -2999,6 +3020,13 @@ foreach (
                 $finding
 
             );
+            $coverageFiles[$index]['saved_checks']++;
+            if (isset($finding['event_key'], $finding['event_name'], $finding['event_line'])) {
+                $coverageEvents[(string) $conn->insert_id] = ['file' => $fileName,
+                    'key' => $index . ':' . $finding['event_key'], 'name' => $finding['event_name'],
+                    'line' => (int) $finding['event_line']];
+            }
+
 
 
 
@@ -3397,6 +3425,21 @@ if ($analyzedFiles > 0) {
 */
 
 
+
+// Persist only server-generated paths, processing state and result/event IDs.
+// The parent Dashboard/logs/.htaccess denies direct web access; files are ignored by Git.
+foreach ($coverageFiles as &$fileCoverage) {
+    if ($fileCoverage['status'] === 'analyzed'
+        && $fileCoverage['saved_checks'] < $fileCoverage['checks']) {
+        $fileCoverage['reason'] = 'Analyzed, but some check results could not be saved.';
+    }
+}
+unset($fileCoverage);
+$coverageOutcome = $analyzedFiles === 0 ? 'failed'
+    : (($scannerErrors > 0 || $saveErrors > 0 || $validatedFiles < $totalSubmittedFiles) ? 'completed_with_issues' : 'completed');
+if (!securelogSaveCoverage($scanId, $currentUserId, $coverageFiles, $coverageEvents, $coverageOutcome)) {
+    error_log('SecureLog coverage metadata could not be saved for scan ' . $scanId);
+}
 
 header(
 

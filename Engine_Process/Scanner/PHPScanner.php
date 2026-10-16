@@ -114,7 +114,8 @@ function scanPHP(string $fileName, string $content, array $projectSources = []):
     $events = securelogPhpDiscoverEvents($content);
     $definitions = securelogPhpProjectDefinitions($fileName, $content, $projectSources);
 
-    foreach ($events as $event) {
+    foreach ($events as $eventIndex => $event) {
+        $resultStart = count($results);
         $rule = $event['rule'];
         $eventName = $rule === 77801 ? 'Authentication Failure'
             : ($rule === 77802 ? 'Access Control Failure' : 'Exception Handling');
@@ -157,6 +158,12 @@ function scanPHP(string $fileName, string $content, array $projectSources = []):
             $recommendation,
             $sinkEvidence
         );
+        // Presentation metadata only; checks and their detection stay unchanged.
+        for ($i = $resultStart; $i < count($results); $i++) {
+            $results[$i]['event_key'] = 'php-' . $eventIndex;
+            $results[$i]['event_name'] = $eventName;
+            $results[$i]['event_line'] = $event['line'];
+        }
     }
 
     // A file without supported events belongs to scan coverage, not findings.
