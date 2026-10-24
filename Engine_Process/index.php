@@ -439,55 +439,13 @@ if (isset($_GET['scan_id'])) {
 
 
 
-        .content {
-
-
-
-            margin-left: 300px;
-
-
-
-            padding: 34px 28px;
-
-
-
-            width:
-
-                calc(100% - 300px);
-
-
-
-            min-height: 100vh;
-
-
-
-            background:
-
-                radial-gradient(
-
-                    circle at 40% 0%,
-
-                    rgba(14, 165, 233, 0.05),
-
-                    transparent 35%
-
-                ),
-
-                var(--bg-main);
-
-        }
+        .content { margin-left:260px; padding:30px 28px; width:calc(100% - 260px); min-width:0; min-height:100vh; }
 
 
 
 
 
-        .scanner-wrapper {
-
-
-
-            max-width: 1150px;
-
-        }
+        .scanner-wrapper { max-width:1480px; margin:0 auto; }
 
 
 
@@ -535,27 +493,7 @@ if (isset($_GET['scan_id'])) {
 
 
 
-        .scanner-grid {
-
-
-
-            display: grid;
-
-
-
-            grid-template-columns:
-
-                380px 1fr;
-
-
-
-            gap: 18px;
-
-
-
-            align-items: stretch;
-
-        }
+        .scanner-grid { display:grid; grid-template-columns:minmax(290px,340px) minmax(0,1fr); gap:24px; align-items:start; }
 
 
 
@@ -1195,13 +1133,7 @@ if (isset($_GET['scan_id'])) {
 
 
 
-        .result-card {
-
-
-
-            min-height: 405px;
-
-        }
+        .result-card { min-width:0; min-height:405px; }
 
 
 
@@ -1271,21 +1203,7 @@ if (isset($_GET['scan_id'])) {
 
 
 
-        .result-body {
-
-
-
-            min-height: 300px;
-
-
-
-            max-height: 420px;
-
-
-
-            overflow-y: auto;
-
-        }
+        .result-body { min-height:280px; max-height:none; overflow:visible; padding-top:18px; }
 
 
 
@@ -1988,6 +1906,50 @@ if (isset($_GET['scan_id'])) {
 .scan-file-content .analysis-table td,.coverage-table td { overflow-wrap:anywhere; }
 @media(max-width:650px) { .scan-overview { grid-template-columns:repeat(2,minmax(0,1fr)); } .scan-file-content .analysis-table { table-layout:auto; } }
 
+
+/* Scanner workspace: one page scroll, readable file tables and compact upload. */
+.content { margin-left:260px; width:calc(100% - 260px); }
+.upload-card { position:sticky; top:24px; min-width:0; }
+.result-header { align-items:flex-start; padding-bottom:2px; }
+.result-header h3 { line-height:1.6; min-width:0; overflow-wrap:anywhere; }
+.result-header .btn { flex-shrink:0; }
+.scan-overview { gap:12px; margin-bottom:16px; }
+.scan-overview>div { padding:14px 16px; border-radius:10px; background:linear-gradient(135deg,#11243a,#0c1b2c); }
+.scan-overview strong { font-size:1.65rem; line-height:1.25; margin-bottom:4px; }
+.scan-overview span { font-size:.76rem; }
+.scan-guidance { font-size:.8rem; margin:12px 0 18px; }
+.scan-file { margin:14px 0; border-radius:10px; overflow:hidden; }
+.scan-file>summary { padding:15px 16px; font-size:.88rem; background:#0b1b2e; line-height:1.5; }
+.scan-file[open]>summary { border-bottom:1px solid #263b52; background:#10243a; }
+.scan-file>summary::marker { color:#67b6ff; }
+.scan-file-content { padding:0; }
+.scan-file-content .analysis-table { margin-top:0; }
+.scan-file-content .analysis-table th { padding:12px 14px; font-size:.68rem; background:#0c1729; }
+.scan-file-content .analysis-table th:first-child { width:16%; }
+.scan-file-content .analysis-table th:nth-child(2) { width:25%; }
+.scan-file-content .analysis-table td { padding:16px 14px; font-size:.8rem; line-height:1.65; }
+.scan-file-content .analysis-table tr:last-child td { border-bottom:0; }
+.scan-file-content .analysis-table tbody tr:hover { background:rgba(59,130,246,.035); }
+.scan-file-content .detail-text { line-height:1.7; }
+.scan-file-content .result-meta { gap:6px; margin-top:9px; }
+.scan-file-content .meta-badge { background:#11253b; color:#9cc9f4; font-size:.64rem; padding:3px 7px; border-radius:5px; }
+.scan-coverage { margin-top:22px; background:#081522; }
+.scan-coverage .analysis-table { table-layout:fixed; }
+.logging-reminder { border-radius:0 8px 8px 0; font-size:.74rem; }
+.logging-reminder>summary { cursor:pointer; font-weight:600; color:#c8def3; }
+.logging-reminder>p { margin:9px 0 0; }
+@media(max-width:1200px) { .scanner-grid { grid-template-columns:300px minmax(0,1fr); gap:18px; } .card { padding:18px; } }
+@media(max-width:1050px) { .scanner-grid { grid-template-columns:minmax(0,1fr); } .upload-card { position:static; } }
+@media(max-width:800px) { .content { margin-left:220px; width:calc(100% - 220px); padding:22px 16px; } }
+@media(max-width:650px) {
+ .scan-overview { grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+ .scan-overview>div { padding:10px 8px; } .scan-overview strong { font-size:1.25rem; }
+ .scan-overview span { font-size:.65rem; } .scan-file-content .analysis-table { table-layout:fixed; }
+ .scan-file-content .analysis-table th:first-child { width:20%; }
+ .scan-file-content .analysis-table th:nth-child(2) { width:26%; }
+ .scan-file-content .analysis-table td,.scan-file-content .analysis-table th { padding:10px 8px; font-size:.7rem; }
+ .status { white-space:normal; } .status i { font-size:.8rem; }
+}
 </style>
 
 
@@ -2112,9 +2074,11 @@ include '../Sidebar/sidebaruser.php';
                     <input type="file" id="prepared-files" name="source_code[]" multiple disabled class="hidden-upload">
                     <div id="relative-paths"></div>
                     <p id="upload-summary" class="upload-summary">Max 200 files, 5 MB each, 50 MB total.</p>
-                    <p class="logging-reminder"><i class="fas fa-info-circle" aria-hidden="true"></i>
-                        Not every file requires security logging. SecureLog checks supported security events and their logging paths.
+                    <details class="logging-reminder">
+                        <summary>Not every file requires security logging.</summary>
+                        <p>SecureLog checks supported security events and their logging paths.
                         Files without detected events appear in Scan Coverage. Include logger files when scanning a project.</p>
+                    </details>
                     <p id="upload-error" class="upload-error" role="alert" hidden></p>
                     <button type="submit" class="btn btn-primary" id="scan-submit">
                         <i class="fas fa-play"></i> Start Engine Analysis

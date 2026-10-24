@@ -466,6 +466,37 @@ try {
         }
 
 
+        .vault-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .dashboard-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            padding: 13px 19px;
+            border: 1px solid #29445e;
+            border-radius: 10px;
+            background: #12283c;
+            color: #e6edf6;
+            font-weight: 800;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .dashboard-button:hover {
+            background: #1b3650;
+        }
+
+        .dashboard-button:focus-visible {
+            outline: 2px solid #22d3ee;
+            outline-offset: 3px;
+        }
+
         .seal-button {
 
             display:
@@ -1075,6 +1106,11 @@ try {
         </div>
 
 
+        <div class="vault-actions">
+        <a class="dashboard-button" href="../Dashboard/dashboard_Admin.php">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+            Back to Dashboard
+        </a>
         <a
             class="seal-button"
             href="sealLog.php"
@@ -1085,6 +1121,7 @@ try {
             Seal Current Log
 
         </a>
+        </div>
 
     </div>
 

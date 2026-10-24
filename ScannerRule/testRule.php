@@ -99,132 +99,14 @@ function validateRegex(
     return $result !== false;
 }
 
-/**
- * Test SIMPLE_PATTERN rule.
- */
-function testSimplePattern(
-    string $pattern,
-    string $sourceCode
-): array {
-
-    $matchedLines = [];
-
-    $lines =
-        preg_split(
-            "/\r\n|\n|\r/",
-            $sourceCode
-        );
-
-    if (!is_array($lines)) {
-        $lines = [];
-    }
-
-    foreach (
-        $lines as
-        $index => $line
-    ) {
-
-        $matched =
-            preg_match(
-                $pattern,
-                $line
-            );
-
-        if ($matched === 1) {
-
-            $matchedLines[] = [
-                'line_number' =>
-                    $index + 1,
-
-                'line_content' =>
-                    $line,
-
-                'primary_match' =>
-                    true,
-
-                'secondary_match' =>
-                    null
-            ];
-        }
-    }
-
-    return [
-        'matched' =>
-            !empty($matchedLines),
-
-        'matches' =>
-            $matchedLines
-    ];
+require_once __DIR__ . '/../Engine_Process/Scanner/DatabaseRuleScanner.php';
+function testSimplePattern(string $pattern, string $sourceCode): array
+{
+    return securelogMatchRule($pattern, $sourceCode);
 }
-
-/**
- * Test CONTEXT_PATTERN rule.
- *
- * Both patterns must match the same source-code line.
- */
-function testContextPattern(
-    string $primaryPattern,
-    string $secondaryPattern,
-    string $sourceCode
-): array {
-
-    $matchedLines = [];
-
-    $lines =
-        preg_split(
-            "/\r\n|\n|\r/",
-            $sourceCode
-        );
-
-    if (!is_array($lines)) {
-        $lines = [];
-    }
-
-    foreach (
-        $lines as
-        $index => $line
-    ) {
-
-        $primaryMatched =
-            preg_match(
-                $primaryPattern,
-                $line
-            ) === 1;
-
-        $secondaryMatched =
-            preg_match(
-                $secondaryPattern,
-                $line
-            ) === 1;
-
-        if (
-            $primaryMatched
-            && $secondaryMatched
-        ) {
-
-            $matchedLines[] = [
-                'line_number' =>
-                    $index + 1,
-
-                'line_content' =>
-                    $line,
-
-                'primary_match' =>
-                    true,
-
-                'secondary_match' =>
-                    true
-            ];
-        }
-    }
-
-    return [
-        'matched' =>
-            !empty($matchedLines),
-
-        'matches' =>
-            $matchedLines
-    ];
+function testContextPattern(string $primaryPattern, string $secondaryPattern, string $sourceCode): array
+{
+    return securelogMatchRule($primaryPattern, $sourceCode, $secondaryPattern);
 }
 
 /* ============================================================
@@ -483,6 +365,7 @@ if (
 
         $testPerformed = true;
 
+        try {
         /* ================================================
            SIMPLE PATTERN
            ================================================ */
@@ -531,6 +414,10 @@ if (
                 false;
         }
 
+        } catch (Throwable $exception) {
+            $errors[] = 'Rule could not be evaluated: ' . $exception->getMessage();
+            $testResult = ['matched' => false, 'matches' => []];
+        }
         if ($testPerformed) {
 
             $testPassed =
@@ -1646,6 +1533,8 @@ require __DIR__
          RULE SUMMARY
          ===================================================== -->
 
+    <p role="note">Pattern matches report weaknesses (FAIL) during scans. No match does not mean PASS.
+    Test both unsafe and safe examples before activation. Context patterns match on the same line.</p>
     <section class="rule-summary">
 
         <div class="rule-summary-header">

@@ -566,6 +566,30 @@ try {
                 rgba(0, 0, 0, 0.35);
         }
 
+        .back-to-vault {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+            padding: 10px 14px;
+            border: 1px solid #29445e;
+            border-radius: 8px;
+            background: #12283c;
+            color: #e8eef7;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .back-to-vault:hover {
+            background: #1b3650;
+        }
+
+        .back-to-vault:focus-visible {
+            outline: 2px solid #22d3ee;
+            outline-offset: 3px;
+        }
+
         .vault-label {
 
             color:
@@ -875,6 +899,10 @@ try {
 <body>
 
 <div class="vault-card">
+
+    <a class="back-to-vault" href="vault.php">
+        <span aria-hidden="true">&larr;</span> Back to Vault
+    </a>
 
     <div class="vault-label">
         Secure Log Vault

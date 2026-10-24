@@ -71,6 +71,7 @@ try {
     $page = 'Engine_Process/index.php?scan_id=' . $scanId;
     [$status, $body] = $request($page, 'owner');
     $assert($status === 200 && !str_contains($body, 'Fatal error'), 'Owner can view existing scan');
+    if (isset($argv[1])) file_put_contents($argv[1], $body);
     $assert(str_contains($body, 'Scan Coverage'), 'Authorized scan page includes coverage section');
     [$status, $body] = $request($page, 'other');
     $assert($status === 404 && trim($body) === 'Scan report not found.', 'Other developer receives no scan results');

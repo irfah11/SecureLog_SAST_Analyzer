@@ -7,16 +7,67 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 $config = require __DIR__ . '/email_config.php';
 
+/** Reuse the local SMTP configuration; never fall back to PHP mail(). */
+function configureSecureLogStatusMailer(PHPMailer $mail): void
+{
+    global $config;
+    $mail->isSMTP();
+    $mail->Host = trim((string) ($config['smtp_host'] ?? ''));
+    $mail->SMTPAuth = true;
+    $mail->Username = trim((string) ($config['smtp_username'] ?? ''));
+    // Gmail App Passwords may be copied with display spaces.
+    $password = (string) ($config['smtp_password'] ?? '');
+    $mail->Password = strtolower($mail->Host) === 'smtp.gmail.com'
+        ? str_replace(' ', '', $password) : $password;
+    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+    $mail->Port = (int) ($config['smtp_port'] ?? 587);
+    $mail->Timeout = 20;
+    $mail->SMTPDebug = 0;
+    $mail->setFrom(trim((string) ($config['from_email'] ?? '')),
+        (string) ($config['from_name'] ?? 'SecureLog Administrator'));
+}
+
+/** Notify the saved account state without changing that state. */
+function sendAccountStatusNotification(
+    string $recipientEmail,
+    string $recipientName,
+    bool $isApproved,
+    ?PHPMailer $mailer = null
+): bool {
+    if ($isApproved) return sendApprovalNotification($recipientEmail, $recipientName, $mailer);
+    $mail = $mailer ?? new PHPMailer(true);
+    try {
+        configureSecureLogStatusMailer($mail);
+        $mail->addAddress($recipientEmail, $recipientName);
+        $mail->CharSet = 'UTF-8';
+        $mail->isHTML(true);
+        $safeName = htmlspecialchars($recipientName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $mail->Subject = 'SecureLog Registration Status';
+        $mail->Body = '<!doctype html><html><body style="background:#07111f;color:#e8eef7;font-family:Arial,sans-serif;padding:24px">'
+            . '<h1 style="color:#22d3ee">SecureLog</h1><h2>Account pending approval</h2>'
+            . '<p>Hello ' . $safeName . ',</p><p>Your SecureLog registration is currently pending administrator approval.</p>'
+            . '<p>You cannot sign in until your account is approved. Contact your administrator if you need assistance.</p>'
+            . '<p>SecureLog Administrator</p></body></html>';
+        $mail->AltBody = "Hello {$recipientName},\n\nYour SecureLog registration is currently pending administrator approval.\n"
+            . "You cannot sign in until your account is approved. Contact your administrator if you need assistance.\n\nSecureLog Administrator";
+        return $mail->send();
+    } catch (\Throwable $exception) {
+        error_log('SecureLog pending-account notification failed. Check the SMTP configuration and mail service.');
+        return false;
+    }
+}
+
 /**
  * Send SecureLog developer approval email.
  */
 function sendApprovalNotification(
     string $recipientEmail,
-    string $recipientName
+    string $recipientName,
+    ?PHPMailer $mailer = null
 ): bool {
     global $config;
 
-    $mail = new PHPMailer(true);
+    $mail = $mailer ?? new PHPMailer(true);
 
     try {
 
@@ -26,29 +77,13 @@ function sendApprovalNotification(
         |--------------------------------------------------------------------------
         */
 
-        $mail->isSMTP();
-
-        $mail->Host = $config['smtp_host'];
-        $mail->SMTPAuth = true;
-
-        $mail->Username = $config['smtp_username'];
-        $mail->Password = $config['smtp_password'];
-
-        $mail->SMTPSecure =
-            PHPMailer::ENCRYPTION_STARTTLS;
-
-        $mail->Port = $config['smtp_port'];
+        configureSecureLogStatusMailer($mail);
 
         /*
         |--------------------------------------------------------------------------
         | EMAIL SENDER
         |--------------------------------------------------------------------------
         */
-
-        $mail->setFrom(
-            $config['from_email'],
-            $config['from_name']
-        );
 
         /*
         |--------------------------------------------------------------------------
@@ -99,7 +134,7 @@ function sendApprovalNotification(
 
         $logoAvailable = false;
 
-        if (file_exists($logoPath)) {
+        if (is_file($logoPath) && is_readable($logoPath)) {
 
             $mail->addEmbeddedImage(
                 $logoPath,
@@ -906,9 +941,7 @@ function sendApprovalNotification(
         |--------------------------------------------------------------------------
         */
 
-        $mail->send();
-
-        return true;
+        return $mail->send();
 
     } catch (Exception $exception) {
 
@@ -997,7 +1030,7 @@ function sendNewDeveloperAccountNotification(
 
         $logoAvailable = false;
 
-        if (file_exists($logoPath)) {
+        if (is_file($logoPath) && is_readable($logoPath)) {
 
             $mail->addEmbeddedImage(
                 $logoPath,

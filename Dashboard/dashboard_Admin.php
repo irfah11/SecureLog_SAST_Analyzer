@@ -1,4 +1,4 @@
-```php
+
 <?php
 /**
  * SecureLog Admin Dashboard

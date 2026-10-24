@@ -83,6 +83,7 @@ require_once __DIR__ . '/../Dashboard/ActivityLogger.php';
 require_once __DIR__ . '/ScanPresentation.php';
 
 require_once __DIR__ . '/Scanner/ScannerEngine.php';
+require_once __DIR__ . '/Scanner/DatabaseRuleScanner.php';
 
 require_once __DIR__ . '/Scanner/PHPScanner.php';
 
@@ -1875,6 +1876,15 @@ $analyzedFiles = 0;
 
 
 $scannerErrors = 0;
+$activeDatabaseRules = [];
+$databaseRuleLoadFailed = false;
+try {
+    $activeDatabaseRules = securelogLoadActiveRules($conn, $language);
+} catch (Throwable $exception) {
+    $databaseRuleLoadFailed = true;
+    error_log('SecureLog: active custom rules could not be loaded.');
+}
+
 
 $saveErrors = 0;
 
@@ -2756,6 +2766,18 @@ foreach (
 
 
 
+    if ($databaseRuleLoadFailed) {
+        $findings[] = createSystemFinding($fileName,
+            'Custom rules could not be loaded. Built-in checks ran, but custom rule coverage is incomplete.');
+        $scannerErrors++;
+    } else {
+        $customFindings = securelogScanDatabaseRules($activeDatabaseRules, $language, $fileName, $content);
+        foreach ($customFindings as $customFinding) {
+            if (($customFinding['standard'] ?? '') === 'SecureLog System') $scannerErrors++;
+        }
+        $findings = array_merge($findings, $customFindings);
+    }
+
     if ($language === 'php' && $findings === []) {
         $analyzedFiles++;
         $coverageWithoutEvents[] = $fileName;
@@ -2848,7 +2870,7 @@ foreach (
     $coverageFiles[$index]['reason'] = 'Analysis returned security checks.';
     $coverageFiles[$index]['checks'] = count($findings);
     if ($language === 'php') {
-        $coverageFiles[$index]['event_count'] = count(array_unique(array_column($findings, 'event_key')));
+        $coverageFiles[$index]['event_count'] = count(array_unique(array_filter(array_column($findings, 'event_key'), static fn($key) => !str_starts_with((string) $key, 'custom-rule-'))));
     }
 
 

@@ -834,7 +834,7 @@ if (!function_exists('sidebarActive')) {
 
                 class="
                     admin-sidebar__link
-                    admin-sidebar__link--vault
+                    
                     <?= sidebarActive(
                         [
                             'vault.php',

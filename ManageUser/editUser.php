@@ -384,40 +384,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $selectedUser['is_active'] ?? 0
         ) === 1;
 
-        if ($isApproved) {
-            $emailSubject =
-                'SecureLog Account Approved';
-
-            $emailBody =
-                "Dear {$recipientName},\n\n"
-                . "Your SecureLog registration has been approved.\n"
-                . "You may now log in and access the SecureLog system.\n\n"
-                . "Regards,\n"
-                . "SecureLog Administrator";
-        } else {
-            $emailSubject =
-                'SecureLog Registration Status';
-
-            $emailBody =
-                "Dear {$recipientName},\n\n"
-                . "Your SecureLog registration is currently pending administrator approval.\n"
-                . "You will receive another notification after your account is approved.\n\n"
-                . "Regards,\n"
-                . "SecureLog Administrator";
+        try {
+            require_once __DIR__ . '/../Notification/NotificationService.php';
+            $emailSent = sendAccountStatusNotification(
+                $recipientEmail,
+                $recipientName,
+                $isApproved
+            );
+        } catch (Throwable $exception) {
+            // Keep credentials and transport details out of the UI and audit log.
+            error_log('SecureLog account-status email service could not be initialized.');
+            $emailSent = false;
         }
-
-        $emailHeaders = [
-            'From: SecureLog Administrator <noreply@securelog.local>',
-            'Reply-To: noreply@securelog.local',
-            'Content-Type: text/plain; charset=UTF-8'
-        ];
-
-        $emailSent = mail(
-            $recipientEmail,
-            $emailSubject,
-            $emailBody,
-            implode("\r\n", $emailHeaders)
-        );
 
         if ($emailSent) {
 
@@ -443,7 +421,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirectEditUser(
             $selectedUserId,
             'error',
-            'The email could not be sent. Configure SMTP or PHP mail settings first.'
+            'The email could not be sent through SMTP. Check the email service configuration or contact the administrator.'
         );
     }
 

@@ -1,0 +1,2572 @@
+
+
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+
+
+<head>
+
+
+
+    <meta charset="UTF-8">
+
+
+
+    <meta
+
+        name="viewport"
+
+        content="width=device-width, initial-scale=1.0"
+
+    >
+
+
+
+    <title>Scanner - SAST Tool</title>
+
+
+
+    <link
+
+        rel="stylesheet"
+
+        href="https\://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+
+    >
+
+
+
+    <link
+
+        href="https\://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+
+        rel="stylesheet"
+
+    >
+
+
+
+
+
+    <style>
+
+
+
+        :root {
+
+
+
+            --bg-main: #020817;
+
+            --bg-sidebar: #071426;
+
+
+
+            --bg-card: #07111f;
+
+            --bg-card-2: #081827;
+
+
+
+            --border: rgba(59, 130, 246, 0.18);
+
+            --border-light: rgba(148, 163, 184, 0.15);
+
+
+
+            --text-main: #f8fafc;
+
+            --text-muted: #93a4b8;
+
+
+
+            --primary: #0d6efd;
+
+            --primary-2: #2563eb;
+
+
+
+            --success: #22c55e;
+
+            --danger: #ff4d67;
+
+            --warning: #94a3b8;
+
+
+
+            --secondary: #172334;
+
+        }
+
+
+
+
+
+        * {
+
+            box-sizing: border-box;
+
+        }
+
+
+
+
+
+        body {
+
+
+
+            margin: 0;
+
+
+
+            min-height: 100vh;
+
+
+
+            font-family: 'Inter', sans-serif;
+
+
+
+            background:
+
+                radial-gradient(
+
+                    circle at top left,
+
+                    rgba(37, 99, 235, 0.08),
+
+                    transparent 30%
+
+                ),
+
+                var(--bg-main);
+
+
+
+            color: var(--text-main);
+
+
+
+            display: flex;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Sidebar
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .sidebar,
+
+        .side-bar,
+
+        .sidebar-user,
+
+        nav,
+
+        aside {
+
+
+
+            background:
+
+                var(--bg-sidebar) !important;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Main Content
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .content { margin-left:260px; padding:30px 28px; width:calc(100% - 260px); min-width:0; min-height:100vh; }
+
+
+
+
+
+        .scanner-wrapper { max-width:1480px; margin:0 auto; }
+
+
+
+
+
+        .content h1 {
+
+
+
+            font-size: 1.35rem;
+
+
+
+            font-weight: 800;
+
+
+
+            color: #ffffff;
+
+
+
+            margin:
+
+                0 0 22px 0;
+
+
+
+            letter-spacing: -0.3px;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Scanner Grid
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .scanner-grid { display:grid; grid-template-columns:minmax(290px,340px) minmax(0,1fr); gap:24px; align-items:start; }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Card
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .card {
+
+
+
+            background:
+
+                rgba(7, 17, 31, 0.92);
+
+
+
+            border:
+
+                1px solid var(--border);
+
+
+
+            border-radius: 10px;
+
+
+
+            padding: 22px;
+
+
+
+            box-shadow:
+
+                0 18px 35px
+
+                rgba(0, 0, 0, 0.28);
+
+        }
+
+
+
+
+
+        .card h3 {
+
+
+
+            font-size: 0.96rem;
+
+
+
+            font-weight: 800;
+
+
+
+            color: #ffffff;
+
+
+
+            margin:
+
+                0 0 22px 0;
+
+
+
+            display: flex;
+
+
+
+            align-items: center;
+
+
+
+            gap: 8px;
+
+        }
+
+
+
+
+
+        .card h3 i.upload-icon {
+
+
+
+            color: #0d6efd;
+
+
+
+            font-size: 1.1rem;
+
+        }
+
+
+
+
+
+        .card h3 i.result-icon {
+
+
+
+            color: var(--success);
+
+
+
+            font-size: 1.1rem;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Form
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        label {
+
+
+
+            display: block;
+
+
+
+            color: #cbd5e1;
+
+
+
+            font-size: 0.75rem;
+
+
+
+            font-weight: 500;
+
+
+
+            margin-bottom: 7px;
+
+        }
+
+
+
+
+
+        .form-select {
+
+
+
+            width: 100%;
+
+
+
+            height: 40px;
+
+
+
+            border-radius: 7px;
+
+
+
+            border:
+
+                1px solid
+
+                var(--border-light);
+
+
+
+            background: #050d19;
+
+
+
+            color: #ffffff;
+
+
+
+            padding:
+
+                0 12px;
+
+
+
+            outline: none;
+
+
+
+            font-size: 0.82rem;
+
+
+
+            margin-bottom: 17px;
+
+        }
+
+
+
+
+
+        .form-select:focus {
+
+
+
+            border-color:
+
+                rgba(
+
+                    37,
+
+                    99,
+
+                    235,
+
+                    0.75
+
+                );
+
+
+
+            box-shadow:
+
+                0 0 0 3px
+
+                rgba(
+
+                    37,
+
+                    99,
+
+                    235,
+
+                    0.12
+
+                );
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Upload Box
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .upload-box {
+
+
+
+            height: 150px;
+
+
+
+            border:
+
+                1.5px dashed
+
+                rgba(
+
+                    37,
+
+                    99,
+
+                    235,
+
+                    0.65
+
+                );
+
+
+
+            border-radius: 8px;
+
+
+
+            background:
+
+                rgba(
+
+                    3,
+
+                    10,
+
+                    23,
+
+                    0.75
+
+                );
+
+
+
+            display: flex;
+
+
+
+            align-items: center;
+
+
+
+            justify-content: center;
+
+
+
+            text-align: center;
+
+
+
+            cursor: pointer;
+
+
+
+            margin-bottom: 17px;
+
+
+
+            transition:
+
+                all 0.25s ease;
+
+        }
+
+
+
+
+
+        .upload-box:hover,
+
+        .upload-box.dragover {
+
+
+
+            border-color: #38bdf8;
+
+
+
+            background:
+
+                rgba(
+
+                    37,
+
+                    99,
+
+                    235,
+
+                    0.08
+
+                );
+
+        }
+
+
+
+
+
+        .upload-inner i {
+
+
+
+            color: #0d6efd;
+
+
+
+            font-size: 2rem;
+
+
+
+            margin-bottom: 14px;
+
+        }
+
+
+
+
+
+        .upload-inner p {
+
+
+
+            color: #dbeafe;
+
+
+
+            font-size: 0.82rem;
+
+
+
+            margin:
+
+                0 0 8px 0;
+
+        }
+
+
+
+
+
+        .upload-inner span {
+
+
+
+            color: #2f8cff;
+
+
+
+            font-size: 0.75rem;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Buttons
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .btn {
+
+
+
+            width: 100%;
+
+
+
+            height: 40px;
+
+
+
+            border: none;
+
+
+
+            border-radius: 7px;
+
+
+
+            color: #ffffff;
+
+
+
+            font-weight: 800;
+
+
+
+            font-size: 0.78rem;
+
+
+
+            display: flex;
+
+
+
+            align-items: center;
+
+
+
+            justify-content: center;
+
+
+
+            gap: 7px;
+
+
+
+            cursor: pointer;
+
+
+
+            text-decoration: none;
+
+
+
+            transition:
+
+                all 0.25s ease;
+
+        }
+
+
+
+
+
+        .btn:hover {
+
+
+
+            transform:
+
+                translateY(-1px);
+
+
+
+            filter:
+
+                brightness(1.08);
+
+        }
+
+
+
+
+
+        .btn-primary {
+
+
+
+            background:
+
+                linear-gradient(
+
+                    90deg,
+
+                    #0d6efd,
+
+                    #006dff
+
+                );
+
+
+
+            box-shadow:
+
+                0 12px 25px
+
+                rgba(
+
+                    13,
+
+                    110,
+
+                    253,
+
+                    0.25
+
+                );
+
+
+
+            margin-bottom: 14px;
+
+        }
+
+
+
+
+
+        .btn-secondary {
+
+
+
+            background: #172334;
+
+
+
+            color: #ffffff;
+
+        }
+
+
+
+
+
+        .btn-success {
+
+
+
+            width: auto;
+
+
+
+            height: 34px;
+
+
+
+            padding:
+
+                0 14px;
+
+
+
+            background: #16a34a;
+
+
+
+            font-size: 0.75rem;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Result Card
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .result-card { min-width:0; min-height:405px; }
+
+
+
+
+
+        .result-header {
+
+
+
+            display: flex;
+
+
+
+            justify-content:
+
+                space-between;
+
+
+
+            align-items: center;
+
+
+
+            gap: 15px;
+
+        }
+
+
+
+
+
+        .result-header h3 {
+
+
+
+            margin-bottom: 0;
+
+        }
+
+
+
+
+
+        hr {
+
+
+
+            border: 0;
+
+
+
+            border-top:
+
+                1px solid
+
+                var(--border-light);
+
+
+
+            margin:
+
+                18px 0 0 0;
+
+        }
+
+
+
+
+
+        .result-body { min-height:280px; max-height:none; overflow:visible; padding-top:18px; }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Empty State
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .empty-state {
+
+
+
+            height: 285px;
+
+
+
+            display: flex;
+
+
+
+            align-items: center;
+
+
+
+            justify-content: center;
+
+
+
+            text-align: center;
+
+
+
+            color: #93c5fd;
+
+        }
+
+
+
+
+
+        .empty-state i {
+
+
+
+            width: 52px;
+
+
+
+            height: 52px;
+
+
+
+            border-radius: 50%;
+
+
+
+            background:
+
+                rgba(
+
+                    37,
+
+                    99,
+
+                    235,
+
+                    0.35
+
+                );
+
+
+
+            display: inline-flex;
+
+
+
+            align-items: center;
+
+
+
+            justify-content: center;
+
+
+
+            font-size: 1.35rem;
+
+
+
+            color: #93c5fd;
+
+
+
+            margin-bottom: 13px;
+
+        }
+
+
+
+
+
+        .empty-state strong {
+
+
+
+            display: block;
+
+
+
+            color: #ffffff;
+
+
+
+            font-size: 0.78rem;
+
+
+
+            margin-bottom: 8px;
+
+        }
+
+
+
+
+
+        .empty-state p {
+
+
+
+            color: #60a5fa;
+
+
+
+            font-size: 0.75rem;
+
+
+
+            margin: 0;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Result Table
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .analysis-table {
+
+
+
+            width: 100%;
+
+
+
+            border-collapse: collapse;
+
+
+
+            margin-top: 18px;
+
+
+
+            color: #dbeafe;
+
+        }
+
+
+
+
+
+        .analysis-table th {
+
+
+
+            background:
+
+                rgba(
+
+                    15,
+
+                    23,
+
+                    42,
+
+                    0.85
+
+                );
+
+
+
+            color: #93c5fd;
+
+
+
+            font-size: 0.70rem;
+
+
+
+            text-transform: uppercase;
+
+
+
+            letter-spacing: 0.5px;
+
+
+
+            padding: 13px 12px;
+
+
+
+            text-align: left;
+
+
+
+            border-bottom:
+
+                1px solid
+
+                var(--border-light);
+
+        }
+
+
+
+
+
+        .analysis-table td {
+
+
+
+            padding: 14px 12px;
+
+
+
+            border-bottom:
+
+                1px solid
+
+                rgba(
+
+                    148,
+
+                    163,
+
+                    184,
+
+                    0.08
+
+                );
+
+
+
+            color: #cbd5e1;
+
+
+
+            font-size: 0.76rem;
+
+
+
+            vertical-align: top;
+
+
+
+            line-height: 1.45;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Table Column Width
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .status-column {
+
+
+
+            width: 115px;
+
+        }
+
+
+
+
+
+        .check-column {
+
+
+
+            width: 165px;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Status
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .status {
+
+
+
+            display: inline-flex;
+
+
+
+            align-items: center;
+
+
+
+            gap: 7px;
+
+
+
+            font-weight: 800;
+
+
+
+            white-space: nowrap;
+
+        }
+
+
+
+
+
+        .status i {
+
+
+
+            font-size: 0.95rem;
+
+        }
+
+
+
+
+
+        .status-pass {
+
+
+
+            color: #34d399;
+
+        }
+
+
+
+
+
+        .status-fail {
+
+
+
+            color: #fb7185;
+
+        }
+
+
+
+
+
+        .status-na {
+
+
+
+            color: #94a3b8;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Check Name
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .check-name {
+
+
+
+            color: #f8fafc;
+
+
+
+            font-weight: 700;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Detail
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .detail-text {
+
+
+
+            color: #cbd5e1;
+
+
+
+            line-height: 1.55;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Optional Metadata
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        .result-meta {
+
+
+
+            display: flex;
+
+
+
+            flex-wrap: wrap;
+
+
+
+            gap: 7px;
+
+
+
+            margin-top: 7px;
+
+        }
+
+
+
+
+
+        .meta-badge {
+
+
+
+            display: inline-flex;
+
+
+
+            align-items: center;
+
+
+
+            padding: 3px 7px;
+
+
+
+            border-radius: 4px;
+
+
+
+            background: #0f172a;
+
+
+
+            color: #93c5fd;
+
+
+
+            font-size: 0.63rem;
+
+
+
+            font-weight: 600;
+
+        }
+
+
+
+
+
+        /*
+
+        |--------------------------------------------------------------------------
+
+        | Responsive
+
+        |--------------------------------------------------------------------------
+
+        */
+
+
+
+        @media (max-width: 992px) {
+
+
+
+            .content {
+
+
+
+                margin-left: 0;
+
+
+
+                width: 100%;
+
+
+
+                padding:
+
+                    25px 18px;
+
+            }
+
+
+
+
+
+            .scanner-grid {
+
+
+
+                grid-template-columns:
+
+                    1fr;
+
+            }
+
+
+
+
+
+            .scanner-wrapper {
+
+
+
+                max-width: 100%;
+
+            }
+
+        }
+
+
+
+
+
+        @media (max-width: 700px) {
+
+
+
+            .analysis-table th,
+
+            .analysis-table td {
+
+
+
+                padding:
+
+                    10px 8px;
+
+            }
+
+
+
+
+
+            .status-column {
+
+
+
+                width: 90px;
+
+            }
+
+
+
+
+
+            .check-column {
+
+
+
+                width: 130px;
+
+            }
+
+
+
+
+
+            .result-meta {
+
+
+
+                display: none;
+
+            }
+
+        }
+
+
+
+        .scan-modes { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+        .mode-button { border:1px solid #334155; background:#0b1728; color:#b7c9df; padding:11px;
+                       border-radius:8px; cursor:pointer; font:inherit; font-size:.75rem; }
+        .mode-button.selected { background:#102b50; border-color:#3b82f6; color:white; font-weight:700; }
+        .hidden-upload { position:absolute; width:1px; height:1px; opacity:0; overflow:hidden; }
+        .upload-summary { color:#93a4b8; font-size:.73rem; line-height:1.6; margin:0 0 15px; }
+        .upload-error { color:#fecaca; background:#450a0a; border:1px solid #991b1b;
+                        padding:10px; border-radius:6px; font-size:.74rem; margin-bottom:12px; }
+        .upload-box:focus-visible { outline:2px solid #60a5fa; outline-offset:3px; }
+
+.logging-reminder { color:#acbdd0; background:#102238; border-left:3px solid #3c9de5; padding:10px 12px; font-size:.76rem; line-height:1.6; margin:12px 0 18px; }
+.scan-overview { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.scan-overview>div { padding:10px; background:#102238; border:1px solid #263b52; border-radius:6px; }
+.scan-overview strong { display:block; font-size:1.3rem; color:#f3f7fc; }
+.scan-overview span { color:#acbdd0; font-size:.7rem; }
+.scan-guidance { color:#acbdd0; font-size:.76rem; line-height:1.65; margin:12px 0; }
+.scan-file,.scan-coverage { border:1px solid #263b52; border-radius:7px; margin:12px 0; background:#07162b; }
+.scan-file>summary,.scan-coverage>summary { cursor:pointer; color:#e6edf6; padding:12px; font-weight:600; font-size:.8rem; }
+.scan-file>summary:focus-visible,.scan-coverage>summary:focus-visible { outline:2px solid #69bfff; outline-offset:2px; }
+.scan-file-content { padding:0 10px 10px; }
+.scan-count { display:block; color:#acbdd0; font-size:.7rem; font-weight:400; margin:5px 0 0 16px; }
+.scan-count.has-fail { color:#ffacb7; }
+.scan-path { overflow-wrap:anywhere; word-break:break-word; }
+.scan-message { color:#acbdd0; font-size:.8rem; line-height:1.6; background:#102238; padding:12px; margin:10px 0; border-radius:6px; }
+.scan-message p { margin:6px 0 0; }
+.scan-coverage { padding:0 12px 12px; }
+.scan-coverage>summary { padding-left:0; }
+.scan-file-content .analysis-table { table-layout:fixed; width:100%; }
+.scan-file-content .analysis-table th:first-child { width:19%; }
+.scan-file-content .analysis-table th:nth-child(2) { width:25%; }
+.scan-file-content .analysis-table td,.coverage-table td { overflow-wrap:anywhere; }
+@media(max-width:650px) { .scan-overview { grid-template-columns:repeat(2,minmax(0,1fr)); } .scan-file-content .analysis-table { table-layout:auto; } }
+
+
+/* Scanner workspace: one page scroll, readable file tables and compact upload. */
+.content { margin-left:260px; width:calc(100% - 260px); }
+.upload-card { position:sticky; top:24px; min-width:0; }
+.result-header { align-items:flex-start; padding-bottom:2px; }
+.result-header h3 { line-height:1.6; min-width:0; overflow-wrap:anywhere; }
+.result-header .btn { flex-shrink:0; }
+.scan-overview { gap:12px; margin-bottom:16px; }
+.scan-overview>div { padding:14px 16px; border-radius:10px; background:linear-gradient(135deg,#11243a,#0c1b2c); }
+.scan-overview strong { font-size:1.65rem; line-height:1.25; margin-bottom:4px; }
+.scan-overview span { font-size:.76rem; }
+.scan-guidance { font-size:.8rem; margin:12px 0 18px; }
+.scan-file { margin:14px 0; border-radius:10px; overflow:hidden; }
+.scan-file>summary { padding:15px 16px; font-size:.88rem; background:#0b1b2e; line-height:1.5; }
+.scan-file[open]>summary { border-bottom:1px solid #263b52; background:#10243a; }
+.scan-file>summary::marker { color:#67b6ff; }
+.scan-file-content { padding:0; }
+.scan-file-content .analysis-table { margin-top:0; }
+.scan-file-content .analysis-table th { padding:12px 14px; font-size:.68rem; background:#0c1729; }
+.scan-file-content .analysis-table th:first-child { width:16%; }
+.scan-file-content .analysis-table th:nth-child(2) { width:25%; }
+.scan-file-content .analysis-table td { padding:16px 14px; font-size:.8rem; line-height:1.65; }
+.scan-file-content .analysis-table tr:last-child td { border-bottom:0; }
+.scan-file-content .analysis-table tbody tr:hover { background:rgba(59,130,246,.035); }
+.scan-file-content .detail-text { line-height:1.7; }
+.scan-file-content .result-meta { gap:6px; margin-top:9px; }
+.scan-file-content .meta-badge { background:#11253b; color:#9cc9f4; font-size:.64rem; padding:3px 7px; border-radius:5px; }
+.scan-coverage { margin-top:22px; background:#081522; }
+.scan-coverage .analysis-table { table-layout:fixed; }
+.logging-reminder { border-radius:0 8px 8px 0; font-size:.74rem; }
+.logging-reminder>summary { cursor:pointer; font-weight:600; color:#c8def3; }
+.logging-reminder>p { margin:9px 0 0; }
+@media(max-width:1200px) { .scanner-grid { grid-template-columns:300px minmax(0,1fr); gap:18px; } .card { padding:18px; } }
+@media(max-width:1050px) { .scanner-grid { grid-template-columns:minmax(0,1fr); } .upload-card { position:static; } }
+@media(max-width:800px) { .content { margin-left:220px; width:calc(100% - 220px); padding:22px 16px; } }
+@media(max-width:650px) {
+ .scan-overview { grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+ .scan-overview>div { padding:10px 8px; } .scan-overview strong { font-size:1.25rem; }
+ .scan-overview span { font-size:.65rem; } .scan-file-content .analysis-table { table-layout:fixed; }
+ .scan-file-content .analysis-table th:first-child { width:20%; }
+ .scan-file-content .analysis-table th:nth-child(2) { width:26%; }
+ .scan-file-content .analysis-table td,.scan-file-content .analysis-table th { padding:10px 8px; font-size:.7rem; }
+ .status { white-space:normal; } .status i { font-size:.8rem; }
+}
+</style>
+
+
+
+</head>
+
+
+
+
+
+<body>
+
+
+
+
+
+
+<link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+>
+
+<link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+>
+
+<style>
+    :root {
+        --developer-sidebar-width: 260px;
+        --developer-sidebar-bg: #07172a;
+        --developer-sidebar-border: #1b2e45;
+
+        --developer-blue: #1168f4;
+        --developer-blue-light: #3182ff;
+        --developer-red: #ff4c5f;
+
+        --developer-text: #ffffff;
+        --developer-muted: #9aa9bc;
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    /* =========================================================
+       SIDEBAR
+       ========================================================= */
+
+    .developer-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 1000;
+
+        width: var(--developer-sidebar-width);
+        height: 100vh;
+
+        display: flex;
+        flex-direction: column;
+
+        padding: 36px 14px 24px;
+
+        color: var(--developer-text);
+        background:
+            linear-gradient(
+                180deg,
+                #0b1a30 0%,
+                #071526 100%
+            );
+
+        border-right: 1px solid var(--developer-sidebar-border);
+
+        font-family:
+            "Inter",
+            "Segoe UI",
+            sans-serif;
+    }
+
+    /* =========================================================
+       BRAND
+       ========================================================= */
+
+    .developer-sidebar__brand {
+        margin: 0 14px 42px;
+
+        color: var(--developer-blue-light);
+
+        font-size: 25px;
+        font-weight: 800;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+    }
+
+    /* =========================================================
+       NAVIGATION
+       ========================================================= */
+
+    .developer-sidebar__navigation {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+    }
+
+    .developer-sidebar__link {
+        min-height: 56px;
+        padding: 0 17px;
+
+        display: flex;
+        align-items: center;
+        gap: 15px;
+
+        color: #f3f6fa;
+        background: transparent;
+
+        border: 1px solid transparent;
+        border-radius: 8px;
+
+        text-decoration: none;
+
+        font-size: 16px;
+        font-weight: 600;
+
+        transition:
+            color 0.2s ease,
+            background-color 0.2s ease,
+            border-color 0.2s ease,
+            transform 0.2s ease;
+    }
+
+    .developer-sidebar__link i {
+        width: 27px;
+
+        color: #f3f6fa;
+
+        font-size: 23px;
+        text-align: center;
+
+        transition: color 0.2s ease;
+    }
+
+    .developer-sidebar__link:hover {
+        color: #ffffff;
+        background: rgba(49, 130, 255, 0.12);
+        border-color: rgba(49, 130, 255, 0.18);
+
+        transform: translateX(2px);
+    }
+
+    .developer-sidebar__link:hover i {
+        color: var(--developer-blue-light);
+    }
+
+    /* Active menu */
+    .developer-sidebar__link.active {
+        color: #ffffff;
+        background:
+            linear-gradient(
+                135deg,
+                #1264e8,
+                #0858dd
+            );
+
+        border-color: rgba(49, 130, 255, 0.45);
+
+        box-shadow:
+            0 8px 22px rgba(17, 104, 244, 0.24);
+    }
+
+    .developer-sidebar__link.active i {
+        color: #ffffff;
+    }
+
+    /* =========================================================
+       BOTTOM AREA
+       ========================================================= */
+
+    .developer-sidebar__bottom {
+        margin-top: auto;
+        padding-top: 22px;
+
+        border-top: 1px solid var(--developer-sidebar-border);
+    }
+
+    .developer-sidebar__account {
+        margin-bottom: 15px;
+        padding: 10px 14px;
+
+        display: flex;
+        align-items: center;
+        gap: 12px;
+
+        color: var(--developer-muted);
+
+        font-size: 12px;
+    }
+
+    .developer-sidebar__account-icon {
+        width: 39px;
+        height: 39px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+
+        color: var(--developer-blue-light);
+        background: rgba(49, 130, 255, 0.12);
+
+        border: 1px solid rgba(49, 130, 255, 0.25);
+        border-radius: 50%;
+
+        font-size: 17px;
+    }
+
+    .developer-sidebar__account-details {
+        min-width: 0;
+    }
+
+    .developer-sidebar__account-label {
+        margin-bottom: 4px;
+
+        color: var(--developer-muted);
+
+        font-size: 11px;
+    }
+
+    .developer-sidebar__account-name {
+        max-width: 150px;
+
+        overflow: hidden;
+
+        color: #ffffff;
+
+        font-size: 13px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .developer-sidebar__logout {
+        min-height: 51px;
+        padding: 0 17px;
+
+        display: flex;
+        align-items: center;
+        gap: 15px;
+
+        color: var(--developer-red);
+        background: transparent;
+
+        border: 1px solid transparent;
+        border-radius: 8px;
+
+        text-decoration: none;
+
+        font-size: 15px;
+        font-weight: 700;
+
+        transition:
+            color 0.2s ease,
+            background-color 0.2s ease,
+            border-color 0.2s ease;
+    }
+
+    .developer-sidebar__logout i {
+        width: 27px;
+
+        font-size: 22px;
+        text-align: center;
+    }
+
+    .developer-sidebar__logout:hover {
+        color: #ffffff;
+        background: rgba(255, 76, 95, 0.13);
+        border-color: rgba(255, 76, 95, 0.25);
+    }
+
+    /* =========================================================
+       PAGE CONTENT BESIDE SIDEBAR
+       ========================================================= */
+
+    .developer-page-content {
+        min-height: 100vh;
+        margin-left: var(--developer-sidebar-width);
+    }
+
+    /*
+     * Compatibility with pages that use admin-page-content
+     * or another existing page-content class.
+     */
+    .admin-page-content {
+        margin-left: var(--developer-sidebar-width);
+    }
+
+    /* =========================================================
+       RESPONSIVE
+       ========================================================= */
+
+    @media (max-width: 800px) {
+        .developer-sidebar {
+            width: 220px;
+        }
+
+        .developer-page-content,
+        .admin-page-content {
+            margin-left: 220px;
+        }
+
+        .developer-sidebar__link {
+            font-size: 14px;
+        }
+    }
+</style>
+
+<aside class="developer-sidebar">
+
+    <!-- Brand -->
+    <div class="developer-sidebar__brand">
+        SAST Tool
+    </div>
+
+    <!-- Main navigation -->
+    <nav class="developer-sidebar__navigation">
+
+        <!-- Dashboard -->
+        <a
+            href="/FinalYearProject/Dashboard/dashboard_Developer.php"
+            class="developer-sidebar__link "
+        >
+            <i class="fa-solid fa-border-all"></i>
+            <span>Dashboard</span>
+        </a>
+
+        <!-- New Scan -->
+        <a
+            href="/FinalYearProject/Engine_Process/index.php"
+            class="developer-sidebar__link active"
+        >
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <span>New Scan</span>
+        </a>
+
+        <!-- History -->
+        <a
+            href="/FinalYearProject/History/index.php"
+            class="developer-sidebar__link "
+        >
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>History</span>
+        </a>
+
+        <!-- Profile -->
+        <a
+            href="/FinalYearProject/ProfileDeveloper/profile.php"
+            class="developer-sidebar__link "
+        >
+            <i class="fa-regular fa-user"></i>
+            <span>Profile</span>
+        </a>
+
+    </nav>
+
+    <!-- Bottom account and logout -->
+    <div class="developer-sidebar__bottom">
+
+        <div class="developer-sidebar__account">
+
+            <div class="developer-sidebar__account-icon">
+                <i class="fa-solid fa-user-code"></i>
+            </div>
+
+            <div class="developer-sidebar__account-details">
+
+                <div class="developer-sidebar__account-label">
+                    Signed in as
+                </div>
+
+                <div class="developer-sidebar__account-name">
+                    Developer                </div>
+
+            </div>
+
+        </div>
+
+        <a
+            href="/FinalYearProject/Registration/Logout.php"
+            class="developer-sidebar__logout"
+            onclick="return confirm('Are you sure you want to log out?');"
+        >
+            <i class="fa-solid fa-right-from-bracket"></i>
+            <span>Logout</span>
+        </a>
+
+    </div>
+
+</aside>
+
+
+
+
+<div class="content">
+
+
+
+    <div class="scanner-wrapper">
+
+
+
+
+
+        <h1>
+
+            Logging Analysis Scanner (Project & Batch Mode)
+
+        </h1>
+
+
+
+
+
+        <div class="scanner-grid">
+
+
+
+
+
+            <!-- =====================================================
+
+                 UPLOAD CARD
+
+                 ===================================================== -->
+
+
+
+            <div class="card upload-card">
+
+
+
+
+
+                <h3>
+
+
+
+                    <i
+
+                        class="fas fa-cloud-upload-alt upload-icon"
+
+                    ></i>
+
+
+
+                    Source Code Upload
+
+
+
+                </h3>
+
+
+
+
+
+                <form id="scan-form" action="scan_process.php" method="POST" enctype="multipart/form-data">
+                    <label for="project-name">Project Name</label>
+                    <input id="project-name" name="project_name" class="form-select" type="text" maxlength="120"
+                           placeholder="e.g. FinalYearProject" required>
+
+                    <label for="language-select">Programming Language</label>
+                    <select name="language" id="language-select" class="form-select" required>
+                        <option value="php" selected>PHP</option>
+                        <option value="java">Java</option>
+                        <option value="javascript">JavaScript</option>
+                        <option value="c">C</option>
+                    </select>
+
+                    <label>Upload Method</label>
+                    <div class="scan-modes">
+                        <button type="button" class="mode-button selected" data-mode="batch">Batch Files</button>
+                        <button type="button" class="mode-button" data-mode="folder">Project Folder</button>
+                    </div>
+                    <input type="hidden" name="upload_mode" id="upload-mode" value="batch">
+                    <div class="upload-box" id="upload-box" role="button" tabindex="0">
+                        <div class="upload-inner">
+                            <i class="fas fa-folder-open"></i>
+                            <p id="file-text">Click to select source files</p>
+                            <span id="upload-hint">Or drag and drop files here</span>
+                        </div>
+                    </div>
+                    <input type="file" id="file-input" name="source_code[]" multiple
+                           accept=".php,.java,.js,.c,.h" class="hidden-upload">
+                    <input type="file" id="folder-input" webkitdirectory directory multiple class="hidden-upload">
+                    <input type="file" id="prepared-files" name="source_code[]" multiple disabled class="hidden-upload">
+                    <div id="relative-paths"></div>
+                    <p id="upload-summary" class="upload-summary">Max 200 files, 5 MB each, 50 MB total.</p>
+                    <details class="logging-reminder">
+                        <summary>Not every file requires security logging.</summary>
+                        <p>SecureLog checks supported security events and their logging paths.
+                        Files without detected events appear in Scan Coverage. Include logger files when scanning a project.</p>
+                    </details>
+                    <p id="upload-error" class="upload-error" role="alert" hidden></p>
+                    <button type="submit" class="btn btn-primary" id="scan-submit">
+                        <i class="fas fa-play"></i> Start Engine Analysis
+                    </button>
+                    <a href="index.php" class="btn btn-secondary">
+                        <i class="fas fa-redo"></i> Clear / New Scan
+                    </a>
+                </form>
+
+
+
+
+
+            </div>
+
+
+
+
+
+            <!-- =====================================================
+
+                 RESULT CARD
+
+                 ===================================================== -->
+
+
+
+            <div class="card result-card">
+
+
+
+
+
+                <div class="result-header">
+
+
+
+
+
+                    <h3>
+
+
+
+                        <i
+
+                            class="fas fa-poll result-icon"
+
+                        ></i>
+
+
+
+                        Analysis Result
+
+
+
+                         - Test 19  Dynamic Include Logger Resolution
+
+
+                    </h3>
+
+
+
+
+
+                    
+
+
+
+
+                        <a
+
+                            href="Download_report.php?scan_id=147&amp;format=pdf"
+
+                            class="btn btn-success"
+
+                            target="_blank"
+
+                        >
+
+
+
+                            <i
+
+                                class="fas fa-file-pdf"
+
+                            ></i>
+
+
+
+                            PDF
+
+
+
+                        </a>
+
+
+
+
+
+                    
+
+
+
+
+                </div>
+
+
+
+
+
+                <hr>
+
+
+
+
+
+                <div class="result-body">
+                    <div class="scan-overview" aria-label="Scan summary">
+<div><strong>0</strong><span>Failed checks</span></div>
+<div><strong>0</strong><span>Passed checks</span></div>
+<div><strong>4</strong><span>N/A checks</span></div>
+</div>
+<p class="scan-guidance">Select a file to view its checks. Files with failed checks appear first.</p>
+<details class="scan-file" open>
+<summary><span class="scan-path">test19_login.php</span></summary>
+<div class="scan-file-content">
+<table class="analysis-table"><thead><tr><th>Status</th><th>Check</th><th>Detail</th></tr></thead><tbody>
+<tr id="result-6037">
+<td><span class="status status-na"><i class="fas fa-circle-minus"></i> N/A</span></td>
+<td><span class="check-name">Security Logging</span></td>
+<td><div class="detail-text">Authentication Failure: a potential external logging wrapper was found, but its implementation could not be verified in this file.</div>
+<div class="result-meta">
+<span class="meta-badge">CWE-778</span><span class="meta-badge">Severity: INFO</span><span class="meta-badge">Line: 10</span></div></td></tr>
+<tr id="result-6038">
+<td><span class="status status-na"><i class="fas fa-circle-minus"></i> N/A</span></td>
+<td><span class="check-name">Log Neutralization</span></td>
+<td><div class="detail-text">Not evaluated because no security logging operation exists for this event.</div>
+<div class="result-meta">
+<span class="meta-badge">CWE-117</span><span class="meta-badge">Severity: INFO</span><span class="meta-badge">Line: 10</span></div></td></tr>
+<tr id="result-6039">
+<td><span class="status status-na"><i class="fas fa-circle-minus"></i> N/A</span></td>
+<td><span class="check-name">Log Storage</span></td>
+<td><div class="detail-text">Not evaluated because no security logging operation exists for this event.</div>
+<div class="result-meta">
+<span class="meta-badge">SecureLog Policy</span><span class="meta-badge">Severity: INFO</span><span class="meta-badge">Line: 10</span></div></td></tr>
+<tr id="result-6040">
+<td><span class="status status-na"><i class="fas fa-circle-minus"></i> N/A</span></td>
+<td><span class="check-name">Log Protection</span></td>
+<td><div class="detail-text">Not evaluated because no security logging operation exists for this event.</div>
+<div class="result-meta">
+<span class="meta-badge">SecureLog Policy</span><span class="meta-badge">Severity: INFO</span><span class="meta-badge">Line: 10</span></div></td></tr>
+</tbody></table>
+</div></details>
+<details class="scan-coverage"><summary>Scan Coverage</summary>
+<p class="scan-guidance"><strong>Outcome:</strong> completed · 2 submitted file(s).</p>
+<p class="scan-guidance">1 analyzed with checks · 1 analyzed without supported events · 0 unsupported, rejected or failed.</p>
+<table class="analysis-table coverage-table"><thead><tr><th>File</th><th>Processing status</th><th>Detail</th></tr></thead><tbody>
+<tr><td class="scan-path">test19_logger.php</td>
+<td>No supported event</td>
+<td>Analyzed: no supported security event detected. This does not establish that logging is unnecessary.</td></tr>
+<tr><td class="scan-path">test19_login.php</td>
+<td>Analyzed with checks</td>
+<td>Analysis returned security checks.<div class="result-meta"><span class="meta-badge">4 saved / 4 returned checks</span></div></td></tr>
+</tbody></table>
+<p class="scan-guidance">No supported event detected does not mean logging is unnecessary. Supply the relevant project files, including logger implementations. Only submitted files are covered.</p>
+</details>
+
+
+
+
+
+
+                </div>
+
+
+
+
+
+            </div>
+
+
+
+
+
+        </div>
+
+
+
+
+
+    </div>
+
+
+
+
+
+</div>
+
+
+
+
+
+<script>
+(() => {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const form = $('scan-form'), box = $('upload-box'), batch = $('file-input');
+    const folder = $('folder-input'), prepared = $('prepared-files');
+    const paths = $('relative-paths'), mode = $('upload-mode'), language = $('language-select');
+    const title = $('file-text'), summary = $('upload-summary'), error = $('upload-error');
+    const project = $('project-name'), submit = $('scan-submit');
+    const maxFiles = 200, maxFile = 5 * 1024 * 1024, maxTotal = 50 * 1024 * 1024;
+    const extensions = {php:['php'], java:['java'], javascript:['js'], c:['c','h']};
+    const ignored = new Set(['vendor','node_modules','.git','.idea','.vscode','dist','build',
+                             'coverage','encrypted_logs','keys','logs','cache','.next']);
+    let valid = false;
+
+    function warn(message) { error.textContent = message; error.hidden = !message; }
+    function clearPrepared() { prepared.value = ''; paths.replaceChildren(); valid = false; }
+    function changeMode(next) {
+        mode.value = next;
+        document.querySelectorAll('.mode-button').forEach(b => b.classList.toggle('selected', b.dataset.mode === next));
+        batch.disabled = next !== 'batch';
+        prepared.disabled = next !== 'folder';
+        batch.value = ''; folder.value = ''; clearPrepared(); warn('');
+        title.textContent = next === 'folder' ? 'Click to select a project folder' : 'Click to select source files';
+        $('upload-hint').textContent = next === 'folder'
+            ? 'Only matching source files will be uploaded' : 'Or drag and drop files here';
+        summary.textContent = 'Max 200 files, 5 MB each, 50 MB total.';
+    }
+    document.querySelectorAll('.mode-button').forEach(b => b.addEventListener('click', () => changeMode(b.dataset.mode)));
+    function openPicker() { (mode.value === 'folder' ? folder : batch).click(); }
+    box.addEventListener('click', openPicker);
+    box.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); }
+    });
+    function eligible(file, path) {
+        const parts = path.split('/');
+        if (parts.some(part => ignored.has(part.toLowerCase()) || !part || part === '..' || part === '.')) return false;
+        const name = parts[parts.length - 1].toLowerCase();
+        if (name === 'email_config.php' || name === 'connection.php') return false;
+        const ext = name.includes('.') ? name.split('.').pop() : '';
+        return extensions[language.value].includes(ext);
+    }
+    function validateFiles(files) {
+        if (!files.length) return 'No eligible files found for the selected language.';
+        if (files.length > maxFiles) return 'This project has ' + files.length + ' eligible files; limit is 200. Select a smaller folder.';
+        if (files.some(f => f.size === 0 || f.size > maxFile)) return 'Files must be non-empty and no larger than 5 MB each.';
+        if (files.reduce((n, f) => n + f.size, 0) > maxTotal) return 'Total upload exceeds 50 MB.';
+        return '';
+    }
+    function prepareFolder() {
+        clearPrepared(); warn('');
+        const files = [...folder.files];
+        const eligibleFiles = files.map(file => {
+            const full = file.webkitRelativePath || file.name;
+            const parts = full.replaceAll('\\', '/').split('/');
+            return {file, path: parts.length > 1 ? parts.slice(1).join('/') : file.name};
+        }).filter(x => eligible(x.file, x.path));
+
+        // A single empty or oversized file must not block an entire project scan.
+        const skippedEmpty = eligibleFiles.filter(x => x.file.size === 0);
+        const skippedLarge = eligibleFiles.filter(x => x.file.size > maxFile);
+        const selected = eligibleFiles.filter(x => x.file.size > 0 && x.file.size <= maxFile);
+        const skipped = skippedEmpty.length + skippedLarge.length;
+
+        if (!selected.length) {
+            warn('No valid source files found. ' + skippedEmpty.length +
+                 ' empty and ' + skippedLarge.length + ' over 5 MB were skipped.');
+            summary.textContent = 'Max 200 files, 5 MB each, 50 MB total.';
+            return;
+        }
+        if (selected.length > maxFiles) {
+            warn(selected.length + ' valid files found; maximum is 200 per scan. Select a smaller folder.');
+            return;
+        }
+        const totalBytes = selected.reduce((n, x) => n + x.file.size, 0);
+        if (totalBytes > maxTotal) {
+            warn('Valid source files total ' + (totalBytes / 1048576).toFixed(2) +
+                 ' MB, exceeding the 50 MB scan limit. Select a smaller folder.');
+            return;
+        }
+        if (typeof DataTransfer === 'undefined') {
+            warn('Use Chrome or Edge for project folder uploads.');
+            return;
+        }
+
+        const dt = new DataTransfer();
+        selected.forEach(({file, path}) => {
+            dt.items.add(file);
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'relative_paths[]';
+            input.value = path;
+            paths.appendChild(input);
+        });
+        prepared.files = dt.files;
+        valid = prepared.files.length === selected.length;
+        if (!valid) {
+            clearPrepared();
+            warn('Could not prepare folder files. Try Chrome or Edge.');
+            return;
+        }
+        const root = files[0]?.webkitRelativePath?.split('/')[0] || 'Project';
+        if (!project.value.trim()) project.value = root;
+        title.textContent = selected.length + ' valid source files ready';
+        const skippedMessage = skipped
+            ? ' · Skipped: ' + skippedEmpty.length + ' empty, ' + skippedLarge.length + ' over 5 MB'
+            : ' · No files skipped';
+        summary.textContent = root + '/ · ' + selected.length + ' files · ' +
+                              (totalBytes / 1048576).toFixed(2) + ' MB' + skippedMessage;
+    }
+    function prepareBatch() {
+        valid = false; warn('');
+        const files = [...batch.files];
+        const problem = validateFiles(files) ||
+            (files.every(f => eligible(f, f.name)) ? '' : 'Files do not match the selected language.');
+        if (problem) { warn(problem); return; }
+        valid = true;
+        title.textContent = files.length + ' source files selected';
+        summary.textContent = 'Batch mode · ' + files.length + ' files ready to scan.';
+    }
+    folder.addEventListener('change', prepareFolder);
+    batch.addEventListener('change', prepareBatch);
+    language.addEventListener('change', () => {
+        if (mode.value === 'folder' && folder.files.length) prepareFolder();
+        if (mode.value === 'batch' && batch.files.length) prepareBatch();
+    });
+    box.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('dragover'); });
+    box.addEventListener('dragleave', () => box.classList.remove('dragover'));
+    box.addEventListener('drop', e => {
+        e.preventDefault(); box.classList.remove('dragover');
+        if (mode.value === 'folder') { warn('Click the upload box to select a project folder.'); return; }
+        batch.files = e.dataTransfer.files; prepareBatch();
+    });
+    form.addEventListener('submit', e => {
+        if (!valid || (mode.value === 'folder' && prepared.files.length !== paths.children.length)) {
+            e.preventDefault(); warn('Please select valid source files before scanning.'); return;
+        }
+        submit.disabled = true; submit.textContent = 'Uploading and scanning…';
+    });
+    changeMode('batch');
+})();
+</script>
+
+
+
+
+
+</body>
+
+
+
+</html>

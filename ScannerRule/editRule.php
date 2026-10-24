@@ -1440,6 +1440,11 @@ require __DIR__
 
     <?php endif; ?>
 
+    <p role="note" style="padding:14px 18px;border:1px solid #28415b;border-radius:8px;color:#b9d4ec;background:#0b1b2b;line-height:1.6;">
+        Active rules run during uploads for the selected language. A pattern match reports a weakness (FAIL).
+        Write patterns for unsafe code; matching a logging or encryption function alone does not prove a weakness.
+        No match does not mean PASS. Context patterns require both patterns on the same line.
+    </p>
     <section class="rule-layout">
 
         <div class="form-panel">
