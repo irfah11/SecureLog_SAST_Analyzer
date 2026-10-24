@@ -1,4 +1,3 @@
-```php
 <?php
 /**
  * SecureLog Developer Dashboard
@@ -73,6 +72,8 @@ $totalScans = fetchDeveloperCount(
     $currentUserId
 );
 
+$projectCount = fetchDeveloperCount($conn, 'SELECT COUNT(DISTINCT ProjectName) FROM scans WHERE UserID = ?', $currentUserId);
+$fileCount = fetchDeveloperCount($conn, 'SELECT COALESCE(SUM(total_files),0) FROM scans WHERE UserID = ?', $currentUserId);
 $recentScans = [];
 
 $recentStatement = $conn->prepare(
@@ -84,28 +85,28 @@ $recentStatement = $conn->prepare(
 
         SUM(
             CASE
-                WHEN UPPER(sr.Severity) = 'HIGH'
+                WHEN UPPER(sr.Status) = 'FAIL' AND UPPER(sr.Severity) = 'HIGH'
                 THEN 1 ELSE 0
             END
         ) AS HighCount,
 
         SUM(
             CASE
-                WHEN UPPER(sr.Severity) = 'MEDIUM'
+                WHEN UPPER(sr.Status) = 'FAIL' AND UPPER(sr.Severity) = 'MEDIUM'
                 THEN 1 ELSE 0
             END
         ) AS MediumCount,
 
         SUM(
             CASE
-                WHEN UPPER(sr.Severity) = 'LOW'
+                WHEN UPPER(sr.Status) = 'FAIL' AND UPPER(sr.Severity) = 'LOW'
                 THEN 1 ELSE 0
             END
         ) AS LowCount,
 
         SUM(
             CASE
-                WHEN UPPER(sr.Severity) = 'INFO'
+                WHEN UPPER(sr.Status) = 'FAIL' AND UPPER(sr.Severity) = 'INFO'
                 THEN 1 ELSE 0
             END
         ) AS InfoCount
@@ -212,7 +213,7 @@ $highStatement = $conn->prepare(
     INNER JOIN scans s
         ON s.ScanID = sr.ScanID
 
-    WHERE s.UserID = ?
+    WHERE s.UserID = ? AND UPPER(sr.Status) = 'FAIL'
     AND {$severityCase} = 'HIGH'
     "
 );
@@ -258,7 +259,7 @@ $severityStatement = $conn->prepare(
     INNER JOIN scans s
         ON s.ScanID = sr.ScanID
 
-    WHERE s.UserID = ?
+    WHERE s.UserID = ? AND UPPER(sr.Status) = 'FAIL'
 
     GROUP BY SeverityName
     "
@@ -324,7 +325,7 @@ $weeklyStatement = $conn->prepare(
     INNER JOIN scans s
         ON s.ScanID = sr.ScanID
 
-    WHERE s.UserID = ?
+    WHERE s.UserID = ? AND UPPER(sr.Status) = 'FAIL'
     AND s.ScanDate >= ?
     AND s.ScanDate < ?
 
@@ -912,6 +913,10 @@ $severityDataJson = json_encode(
                 height: 260px;
             }
         }
+
+        .stat-card,.statistic-card,.chart-card,.dashboard-panel,.table-container{border-radius:12px!important;box-shadow:0 12px 32px #00000020}
+        .stat-card,.statistic-card{border-left:3px solid #4388ff!important}
+        .dashboard-container{max-width:1500px;margin:0 auto}
     </style>
 </head>
 
@@ -952,6 +957,7 @@ $severityDataJson = json_encode(
                 </div>
 
             </header>
+            <?php $visualDashboardRole = 'developer'; require __DIR__ . '/dashboard_welcome.php'; ?>
 
             <!-- =================================================
                  STATISTICS
@@ -976,13 +982,7 @@ $severityDataJson = json_encode(
                         <?= number_format($totalScans); ?>
                     </div>
 
-                    <div class="stat-footer">
-                        <span>vs previous 30 days</span>
-
-                        <span class="trend-red">
-                            ↑ 12%
-                        </span>
-                    </div>
+                    <div class="stat-footer"><span>All time: your scans</span></div>
 
                 </article>
 
@@ -991,7 +991,7 @@ $severityDataJson = json_encode(
 
                     <div class="stat-top">
 
-                        <h3>High Severity</h3>
+                        <h3>High severity failed checks</h3>
 
                         <div class="stat-icon red">
                             <i class="fa-solid fa-shield-halved"></i>
@@ -1003,13 +1003,7 @@ $severityDataJson = json_encode(
                         <?= number_format($highSeverityFindings); ?>
                     </div>
 
-                    <div class="stat-footer">
-                        <span>vs previous 30 days</span>
-
-                        <span class="trend-red">
-                            ↑ 8%
-                        </span>
-                    </div>
+                    <div class="stat-footer"><span>All time: FAIL checks only</span></div>
 
                 </article>
 
@@ -1027,16 +1021,10 @@ $severityDataJson = json_encode(
                     </div>
 
                     <div class="stat-value">
-                        8
+                        <?= number_format($projectCount); ?>
                     </div>
 
-                    <div class="stat-footer">
-                        <span>vs previous 30 days</span>
-
-                        <span class="trend-up">
-                            ↑ 4%
-                        </span>
-                    </div>
+                    <div class="stat-footer"><span>Distinct project names</span></div>
 
                 </article>
 
@@ -1045,7 +1033,7 @@ $severityDataJson = json_encode(
 
                     <div class="stat-top">
 
-                        <h3>Lines of Code Scanned</h3>
+                        <h3>Files submitted</h3>
 
                         <div class="stat-icon purple">
                             <i class="fa-solid fa-code"></i>
@@ -1054,16 +1042,10 @@ $severityDataJson = json_encode(
                     </div>
 
                     <div class="stat-value">
-                        1,200
+                        <?= number_format($fileCount); ?>
                     </div>
 
-                    <div class="stat-footer">
-                        <span>vs previous 30 days</span>
-
-                        <span class="trend-up">
-                            ↑ 10%
-                        </span>
-                    </div>
+                    <div class="stat-footer"><span>All time: repeats included</span></div>
 
                 </article>
 
@@ -1080,7 +1062,7 @@ $severityDataJson = json_encode(
 
                     <h2>
                         <i class="fa-solid fa-chart-line"></i>
-                        Detected Issues Over Time
+                        Failed checks over time: last 6 weeks
                     </h2>
 
                     <div class="chart-box">
@@ -1094,7 +1076,7 @@ $severityDataJson = json_encode(
 
                     <h2>
                         <i class="fa-solid fa-chart-pie"></i>
-                         Detected Issues by Severity
+                         Failed checks by severity: all time
                     </h2>
 
                     <div class="severity-layout">
@@ -1127,7 +1109,7 @@ $severityDataJson = json_encode(
                         <thead>
                             <tr>
                                 <th>Project Name</th>
-                                <th>Vulnerabilities</th>
+                                <th>Failed checks</th>
                                 <th>Scan Date</th>
                                 <th>Status</th>
                             </tr>

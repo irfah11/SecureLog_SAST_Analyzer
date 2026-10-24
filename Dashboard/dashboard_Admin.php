@@ -1,4 +1,3 @@
-
 <?php
 /**
  * SecureLog Admin Dashboard
@@ -168,6 +167,7 @@ $severityStats = [
 $severityQuery = $conn->query(
     'SELECT UPPER(severity) AS severity_name, COUNT(*) AS total
      FROM scan_results
+     WHERE UPPER(Status) = \'FAIL\'
      GROUP BY UPPER(severity)'
 );
 
@@ -303,7 +303,7 @@ $highCurrentPeriod = fetchScalarInt(
     "SELECT COUNT(*)
      FROM scan_results sr
      INNER JOIN scans s ON s.ScanID = sr.ScanID
-     WHERE UPPER(sr.severity) = 'HIGH'
+     WHERE UPPER(sr.Status) = 'FAIL' AND UPPER(sr.severity) = 'HIGH'
      AND s.ScanDate >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
 );
 
@@ -312,7 +312,7 @@ $highPreviousPeriod = fetchScalarInt(
     "SELECT COUNT(*)
      FROM scan_results sr
      INNER JOIN scans s ON s.ScanID = sr.ScanID
-     WHERE UPPER(sr.severity) = 'HIGH'
+     WHERE UPPER(sr.Status) = 'FAIL' AND UPPER(sr.severity) = 'HIGH'
      AND s.ScanDate >= DATE_SUB(NOW(), INTERVAL 60 DAY)
      AND s.ScanDate < DATE_SUB(NOW(), INTERVAL 30 DAY)"
 );
@@ -328,7 +328,7 @@ $mediumCurrentPeriod = fetchScalarInt(
     "SELECT COUNT(*)
      FROM scan_results sr
      INNER JOIN scans s ON s.ScanID = sr.ScanID
-     WHERE UPPER(sr.severity) = 'MEDIUM'
+     WHERE UPPER(sr.Status) = 'FAIL' AND UPPER(sr.severity) = 'MEDIUM'
      AND s.ScanDate >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
 );
 
@@ -337,7 +337,7 @@ $mediumPreviousPeriod = fetchScalarInt(
     "SELECT COUNT(*)
      FROM scan_results sr
      INNER JOIN scans s ON s.ScanID = sr.ScanID
-     WHERE UPPER(sr.severity) = 'MEDIUM'
+     WHERE UPPER(sr.Status) = 'FAIL' AND UPPER(sr.severity) = 'MEDIUM'
      AND s.ScanDate >= DATE_SUB(NOW(), INTERVAL 60 DAY)
      AND s.ScanDate < DATE_SUB(NOW(), INTERVAL 30 DAY)"
 );
@@ -367,7 +367,7 @@ $weeklyStatement = $conn->prepare(
             COUNT(*) AS total
      FROM scan_results sr
      INNER JOIN scans s ON s.ScanID = sr.ScanID
-     WHERE s.ScanDate >= ?
+     WHERE UPPER(sr.Status) = \'FAIL\' AND s.ScanDate >= ?
      AND s.ScanDate < ?
      GROUP BY UPPER(sr.severity)'
 );
@@ -471,7 +471,7 @@ $roleValuesJson = json_encode([
     >
 
     <script
-        src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+        src="/FinalYearProject/Asset/js/chart.umd.min.js"
     ></script>
 
     <style>
@@ -1007,6 +1007,10 @@ $roleValuesJson = json_encode([
                 justify-content: space-between;
             }
         }
+
+        .stat-card,.statistic-card,.chart-card,.dashboard-panel,.table-container{border-radius:12px!important;box-shadow:0 12px 32px #00000020}
+        .stat-card,.statistic-card{border-left:3px solid #4388ff!important}
+        .dashboard-container{max-width:1500px;margin:0 auto}
     </style>
 </head>
 
@@ -1067,6 +1071,7 @@ $roleValuesJson = json_encode([
                 </div>
 
             </header>
+            <?php $visualDashboardRole = 'admin'; require __DIR__ . '/dashboard_welcome.php'; ?>
 
             <!-- =================================================
                  STATISTIC CARDS
@@ -1092,19 +1097,6 @@ $roleValuesJson = json_encode([
                         </div>
 
                     </div>
-
-                    <svg
-                        class="sparkline"
-                        viewBox="0 0 90 35"
-                        fill="none"
-                    >
-                        <polyline
-                            points="1,26 13,15 25,28 39,5 53,27 66,14 88,28"
-                            stroke="#00bff3"
-                            stroke-width="2"
-                            fill="none"
-                        />
-                    </svg>
 
                     <div class="statistic-description">
                         vs last 7 days
@@ -1140,19 +1132,6 @@ $roleValuesJson = json_encode([
 
                     </div>
 
-                    <svg
-                        class="sparkline"
-                        viewBox="0 0 90 35"
-                        fill="none"
-                    >
-                        <polyline
-                            points="1,27 14,16 27,29 42,4 56,28 69,13 89,29"
-                            stroke="#ff6500"
-                            stroke-width="2"
-                            fill="none"
-                        />
-                    </svg>
-
                     <div class="statistic-description">
                         All time
                     </div>
@@ -1187,21 +1166,8 @@ $roleValuesJson = json_encode([
 
                     </div>
 
-                    <svg
-                        class="sparkline"
-                        viewBox="0 0 90 35"
-                        fill="none"
-                    >
-                        <polyline
-                            points="1,29 22,29 34,14 46,29 89,29"
-                            stroke="#ff2945"
-                            stroke-width="2"
-                            fill="none"
-                        />
-                    </svg>
-
                     <div class="statistic-description">
-                        CWE-117 &amp; CWE-532
+                        All time: HIGH failed checks
                     </div>
 
                     <div class="statistic-trend">
@@ -1234,21 +1200,8 @@ $roleValuesJson = json_encode([
 
                     </div>
 
-                    <svg
-                        class="sparkline"
-                        viewBox="0 0 90 35"
-                        fill="none"
-                    >
-                        <polyline
-                            points="1,27 14,15 27,29 42,8 56,28 69,14 89,29"
-                            stroke="#ffd20a"
-                            stroke-width="2"
-                            fill="none"
-                        />
-                    </svg>
-
                     <div class="statistic-description">
-                        CWE-778
+                        All time: MEDIUM failed checks
                     </div>
 
                     <div class="statistic-trend">
@@ -1758,4 +1711,3 @@ $roleValuesJson = json_encode([
 
 </body>
 </html>
-```
