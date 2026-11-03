@@ -2174,11 +2174,11 @@ include '../Sidebar/sidebaruser.php';
 
                         <a
 
-                            href="Download_report.php?scan_id=<?= (int)$scan_id ?>&amp;format=pdf"
+                            href="Download_report.php?scan_id=<?= (int)$scan_id ?>"
 
                             class="btn btn-success"
 
-                            target="_blank"
+                            aria-label="View report before downloading PDF"
 
                         >
 
@@ -2186,13 +2186,13 @@ include '../Sidebar/sidebaruser.php';
 
                             <i
 
-                                class="fas fa-file-pdf"
+                                class="fas fa-file-alt"
 
                             ></i>
 
 
 
-                            PDF
+                            View Report
 
 
 
