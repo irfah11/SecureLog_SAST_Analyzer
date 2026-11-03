@@ -2770,11 +2770,14 @@ foreach (
 
 
     if ($databaseRuleLoadFailed) {
+        $coverageFiles[$index]['custom_rule_error'] = true;
         $findings[] = createSystemFinding($fileName,
             'Custom rules could not be loaded. Built-in checks ran, but custom rule coverage is incomplete.');
         $scannerErrors++;
     } else {
-        $customFindings = securelogScanDatabaseRules($activeDatabaseRules, $language, $fileName, $content);
+        $customEvaluations = [];
+        $customFindings = securelogScanDatabaseRules($activeDatabaseRules, $language, $fileName, $content, $customEvaluations);
+        $coverageFiles[$index]['custom_rules'] = $customEvaluations;
         foreach ($customFindings as $customFinding) {
             if (($customFinding['standard'] ?? '') === 'SecureLog System') $scannerErrors++;
         }

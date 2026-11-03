@@ -34,14 +34,18 @@ function securelogLoadActiveRules(mysqli $conn, string $language): array
     }
 }
 
-function securelogScanDatabaseRules(array $rules, string $language, string $file, string $source): array
+function securelogScanDatabaseRules(array $rules, string $language, string $file, string $source, ?array &$evaluations = null): array
 {
+    $evaluations = [];
     $findings = [];
     $seen = [];
     foreach ($rules as $rule) {
         if (strtoupper($rule['Status'] ?? '') !== 'ACTIVE'
             || strcasecmp($rule['Language'] ?? '', $language) !== 0) continue;
         $id = (int) $rule['RuleID'];
+        $record = ['id'=>$id,'code'=>$rule['RuleCode'],'name'=>$rule['RuleName'],
+            'language'=>$rule['Language'],'standard'=>$rule['CWEID'] ?: 'SecureLog Custom Rule',
+            'status'=>'No match','matches'=>0];
         try {
             $type = $rule['MatchType'];
             if (!in_array($type, ['SIMPLE_PATTERN', 'CONTEXT_PATTERN'], true)) {
@@ -62,12 +66,16 @@ function securelogScanDatabaseRules(array $rules, string $language, string $file
                 $finding['event_name'] = 'Custom rule: ' . $rule['RuleCode'];
                 $finding['event_line'] = $line;
                 $findings[] = $finding;
+                $record['matches']++;
             }
+            if ($record['matches'] > 0) $record['status'] = 'Matched';
         } catch (Throwable $exception) {
+            $record['status'] = 'Could not evaluate';
             $findings[] = createFinding(null, 'Scan Validation', 'INFO', $file, 0,
                 'Custom rule ' . $id . ' could not be evaluated. ' . $exception->getMessage(),
                 'Review and retest this rule.', 'N/A', 'SecureLog System');
         }
+        $evaluations[] = $record;
     }
     return $findings;
 }

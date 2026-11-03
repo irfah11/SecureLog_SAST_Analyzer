@@ -41,6 +41,26 @@ $coverage = $presentation['coverage'];
 <?php endforeach; ?>
 </tbody></table>
 <?php endif; ?>
+<?php if (!empty($file['custom_rules'])): ?>
+<section class="custom-rule-results" style="margin:14px;border:1px solid #263b52;border-radius:8px;overflow:hidden;">
+<h4 style="margin:14px;color:#b9d5f2;">Custom rules used in this scan</h4>
+<p class="scan-guidance" style="margin:14px;">Active rules for the selected language. No match is not a security PASS.</p>
+<table class="analysis-table"><thead><tr><th>Result</th><th>Rule</th><th>Detail</th></tr></thead><tbody>
+<?php foreach ($file['custom_rules'] as $custom): ?>
+<tr><td><?= $escape($custom['status'] ?? 'Unknown') ?></td>
+<td><strong><?= $escape($custom['code'] ?? '') ?></strong><br><?= $escape($custom['name'] ?? '') ?></td>
+<td><?= (int) ($custom['matches'] ?? 0) ?> match(es)<div class="result-meta"><span class="meta-badge"><?= $escape($custom['standard'] ?? '') ?></span><span class="meta-badge"><?= $escape($custom['language'] ?? '') ?></span></div></td></tr>
+<?php endforeach; ?>
+</tbody></table></section>
+<?php else: ?>
+<?php if (!empty($file['custom_rule_error'])): ?>
+<p class="scan-guidance" style="margin:14px;">Custom rules could not be loaded for this file. They were not evaluated.</p>
+<?php elseif (array_key_exists('custom_rules',$file)): ?>
+<p class="scan-guidance" style="margin:14px;">No active custom rules for this language were loaded at scan time.</p>
+<?php else: ?>
+<p class="scan-guidance" style="margin:14px;">No per-file custom-rule evaluation record is available here. Scan Coverage identifies the files processed; rerun older scans to capture which active rules were evaluated.</p>
+<?php endif; ?>
+<?php endif; ?>
 <?php if ($file['rows']): ?>
 <details class="scan-event-details" style="margin:14px;border:1px solid #263b52;border-radius:8px;overflow:hidden;">
 <summary style="cursor:pointer;padding:12px;color:#9acfff;">View details · <?= count($file['rows']) ?> recorded checks / additional findings</summary>

@@ -27,3 +27,12 @@ $bad = array_replace($rule, ['Pattern' => '/[/']);
 $rows = securelogScanDatabaseRules([$bad, $rule], 'php', 'x.php', $source);
 checkRule(count($rows) === 2 && $rows[0]['status'] === 'N/A' && $rows[1]['status'] === 'FAIL', 'Invalid regex is visible and does not stop other rules');
 checkRule(securelogMatchRule($rule['Pattern'], $source)['matches'][0]['line_number'] === 2, 'Shared test matcher agrees with scanner');
+$evaluation = [];
+securelogScanDatabaseRules([$rule],'php','safe.php','<?php error_log("Failed");',$evaluation);
+checkRule(count($evaluation) === 1 && $evaluation[0]['code'] === 'SECRET_LOG'
+    && $evaluation[0]['status'] === 'No match','Active rule stays visible when no match is found');
+checkRule(!isset($evaluation[0]['Pattern']) && !isset($evaluation[0]['source']), 'Rule snapshot stores no pattern or source code');
+securelogScanDatabaseRules([$rule],'php','login.php',$source,$evaluation);
+checkRule($evaluation[0]['status'] === 'Matched' && $evaluation[0]['matches'] === 1,'Rule evaluation records match count');
+securelogScanDatabaseRules([$bad],'php','login.php',$source,$evaluation);
+checkRule($evaluation[0]['status'] === 'Could not evaluate','Regex failure is distinguished from no match');

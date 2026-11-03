@@ -73,6 +73,17 @@ function securelogPresentation(array $rows, ?array $coverage): array
             $files[$file]['failed']++;
         }
     }
+    // Preserve the rules actually evaluated during this scan, including no matches.
+    // Never substitute today's database configuration for historical scan evidence.
+    foreach (($coverage['files'] ?? []) as $item) {
+        $path = (string) ($item['file'] ?? '');
+        if ($path === '') continue;
+        if (!empty($item['custom_rule_error']) && isset($files[$path])) $files[$path]['custom_rule_error'] = true;
+        if (!array_key_exists('custom_rules',$item)) continue;
+        if (!$item['custom_rules'] && !isset($files[$path])) continue;
+        $files[$path] ??= ['path'=>$path,'events'=>[],'failed'=>0,'notes'=>[]];
+        $files[$path]['custom_rules'] = $item['custom_rules'];
+    }
     $ranks = ['FAIL' => 0, 'PASS' => 1, 'N/A' => 2];
     foreach ($files as &$file) {
         foreach ($file['events'] as &$event) {

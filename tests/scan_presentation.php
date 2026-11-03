@@ -60,6 +60,20 @@ $assert(str_contains($html, 'class="scan-file" >'), 'Non-failed file groups rema
 $assert(substr_count($html,'class="analysis-table file-check-summary"') === 2, 'Each analyzed file has one compact check summary');
 $assert(str_contains($html, '<details class="scan-event-details"') && !str_contains($html, '<details class="scan-event-details" open'), 'Original event evidence is collapsed by default');
 $assert(str_contains($html,'id="result-1"') && str_contains($html,'Line '), 'Result anchors and line evidence remain available in details');
+$customCoverage = $coverage;
+$customCoverage['files'][2]['custom_rules'] = [['id'=>42,'code'=>'PHP_LOG_PASSWORD_DIRECT',
+    'name'=>'Password Written Directly to Log','language'=>'PHP','standard'=>'CWE-532','status'=>'No match','matches'=>0]];
+$presentation = securelogPresentation($rows,$customCoverage);
+ob_start(); require __DIR__ . '/../Engine_Process/scan_results_view.php'; $customHtml = ob_get_clean();
+$assert(isset($presentation['files']['dashboard.php']) && $presentation['files']['dashboard.php']['summary'] === [], 'File without built-in event still exposes its evaluated custom rules');
+$assert(str_contains($customHtml,'Custom rules used in this scan') && str_contains($customHtml,'PHP_LOG_PASSWORD_DIRECT')
+    && str_contains($customHtml,'No match'), 'No-match custom rule appears directly in file results');
+$assert($presentation['counts'] === ['FAIL'=>1,'PASS'=>1,'N/A'=>6,'SYSTEM'=>0], 'No-match evaluation adds no invented security PASS or finding');
+$customCoverage['files'][2]['custom_rules'][0]['code'] = '<img src=x onerror=alert(1)>';
+$presentation = securelogPresentation($rows,$customCoverage);
+ob_start(); require __DIR__ . '/../Engine_Process/scan_results_view.php'; $customHtml = ob_get_clean();
+$assert(!str_contains($customHtml,'<img'), 'Custom rule metadata is escaped');
+$presentation = securelogPresentation($rows,$coverage);
 $assert(str_contains($html, 'Scan Coverage') && str_contains($html, 'Only submitted files are covered'), 'Coverage explanation is visible');
 $legacy = securelogPresentation($rows, null);
 $assert($legacy['events'] === 2 && $legacy['coverage'] === null, 'Old rows can be grouped without inventing coverage');
