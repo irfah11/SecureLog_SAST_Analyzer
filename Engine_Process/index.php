@@ -2079,6 +2079,10 @@ include '../Sidebar/sidebaruser.php';
                         <p>SecureLog checks supported security events and their logging paths.
                         Files without detected events appear in Scan Coverage. Include logger files when scanning a project.</p>
                     </details>
+                    <label style="display:flex;gap:9px;align-items:flex-start;margin:14px 0;font-size:12px;line-height:1.6;color:#b9cde3;">
+                        <input type="checkbox" name="extended_logging" value="1" checked style="margin-top:4px;">
+                        <span>Extended PHP review: include login success and supported validation failures, and assess user context within Security Logging. Four checks per event; retention is outside this scan.</span>
+                    </label>
                     <p id="upload-error" class="upload-error" role="alert" hidden></p>
                     <button type="submit" class="btn btn-primary" id="scan-submit">
                         <i class="fas fa-play"></i> Start Engine Analysis

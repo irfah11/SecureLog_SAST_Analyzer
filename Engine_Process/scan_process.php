@@ -1226,7 +1226,8 @@ function routeToScanner(
     string $fileName,
 
     string $content,
-    array $projectSources = []
+    array $projectSources = [],
+    bool $extendedLogging = false
 
 ): array {
 
@@ -1243,7 +1244,8 @@ function routeToScanner(
                 $fileName,
 
                 $content,
-                $projectSources
+                $projectSources,
+                $extendedLogging
 
             ),
 
@@ -2590,7 +2592,8 @@ foreach (
                 $fileName,
 
                 $content,
-                $phpProjectSources
+                $phpProjectSources,
+                ($_POST['extended_logging'] ?? null) === '1'
 
             );
 

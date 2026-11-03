@@ -19,7 +19,7 @@ function securelogReportModel(array $scan, array $rows): array
         $ruleId = (int) ($row['RuleID'] ?? 0);
         $standard = trim((string) ($row['Standard'] ?? ''));
         if ($standard === '') {
-            $standard = in_array($ruleId, [77801, 77802, 77803], true) ? 'CWE-778'
+            $standard = in_array($ruleId, [77801, 77802, 77803, 77804, 77805], true) ? 'CWE-778'
                 : (($ruleId >= 11700 && $ruleId < 11800) ? 'CWE-117' : 'SecureLog Policy');
         }
         $name = trim((string) ($row['VulnerabilityName'] ?? '')) ?: 'Security Check';
@@ -64,7 +64,7 @@ function securelogReportRecommendation(array $row): string
         'security logging' => 'Record the security event on every relevant path, including failure and denial paths. Exclude passwords, tokens and other secrets.',
         'log neutralization' => 'Neutralize CR, LF and unsafe control characters in external input before the actual value reaches the logging operation.',
         'log storage' => 'Use an explicit .txt destination if required by the SecureLog project policy. Verify filesystem permissions and access restrictions separately.',
-        'log protection' => 'Write the protected payload to the log, rather than plaintext. Manage encryption keys separately and verify integrity during decryption.',
+        'log protection', 'log encryption' => 'Write the protected payload to the log, rather than plaintext. Manage encryption keys separately and verify integrity during decryption.',
         default => 'Review the recorded evidence, correct the failed check, and rescan the affected files.'
     };
 }
@@ -72,10 +72,10 @@ function securelogReportRecommendation(array $row): string
 function securelogReportImpact(array $row): string
 {
     return match (strtolower($row['VulnerabilityName'])) {
-        'security logging' => 'A missing event record can make suspicious activity harder to detect and investigate.',
+        'security logging' => 'Missing event records or insufficient event context can make suspicious activity harder to detect and investigate.',
         'log neutralization' => 'Untrusted control characters may create misleading or forged log entries.',
         'log storage' => 'The recorded destination does not meet this project\'s storage policy. File extensions alone do not establish secure storage.',
-        'log protection' => 'Unprotected log contents may be exposed to anyone who can read the stored data.',
+        'log protection', 'log encryption' => 'Unprotected log contents may be exposed to anyone who can read the stored data.',
         default => 'Review this finding in the context of the application and its deployment.'
     };
 }

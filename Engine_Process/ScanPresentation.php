@@ -82,6 +82,7 @@ function securelogPresentation(array $rows, ?array $coverage): array
         $file['rows'] = [];
         foreach ($file['events'] as $event) array_push($file['rows'], ...$event['rows']);
         usort($file['rows'], static fn(array $a, array $b): int => $ranks[$a['Status']] <=> $ranks[$b['Status']]);
+        $file['summary'] = securelogFileCheckSummaries($file['rows']);
         uasort($file['events'], static fn(array $a, array $b): int => ($b['failed'] <=> $a['failed']) ?: ($a['line'] <=> $b['line']));
     }
     unset($file);
@@ -89,6 +90,32 @@ function securelogPresentation(array $rows, ?array $coverage): array
     return ['files' => $files, 'counts' => $counts,
         'events' => array_sum(array_map(static fn(array $file): int => count($file['events']), $files)),
         'coverage' => $coverage];
+}
+
+/** Display aggregation only. Original event rows and saved scan counts are retained. */
+function securelogFileCheckSummaries(array $rows): array
+{
+    $groups = array_fill_keys(['Security Logging', 'Log Neutralization', 'Log Storage', 'Log Encryption'], []);
+    foreach ($rows as $row) {
+        // Configurable database rules are additional findings, not built-in checks.
+        if (str_starts_with((string) ($row['VulnerabilityName'] ?? ''), '[')) continue;
+        $name = getCheckName($row);
+        if (($row['VulnerabilityName'] ?? '') === 'Log Context') $name = 'Security Logging';
+        if (isset($groups[$name])) $groups[$name][] = $row;
+    }
+    if (!array_filter($groups)) return [];
+    $summaries = [];
+    foreach ($groups as $name => $evidence) {
+        $counts = ['FAIL'=>0, 'N/A'=>0, 'PASS'=>0];
+        foreach ($evidence as $row) $counts[$row['Status']]++;
+        $status = $counts['FAIL'] ? 'FAIL' : ($counts['N/A'] || !$evidence ? 'N/A' : 'PASS');
+        $summaries[] = ['name'=>$name, 'status'=>$status, 'counts'=>$counts,
+            'description'=>!$evidence ? 'No result for this check was recorded in this scan.'
+                : ($status === 'FAIL' ? 'At least one recorded event failed this check.'
+                    : ($status === 'N/A' ? 'No recorded failures, but at least one event could not be verified.'
+                        : 'All recorded event results for this check passed.'))];
+    }
+    return $summaries;
 }
 
 function securelogPresentationEscape(mixed $value): string
@@ -262,7 +289,7 @@ function getCheckName(array $row): string
 
     ) {
 
-        return 'Log Protection';
+        return 'Log Encryption';
 
     }
 
@@ -488,7 +515,7 @@ function getDetail(array $row): string
 
 
 
-    if ($check === 'Log Protection') {
+    if (in_array($check, ['Log Protection', 'Log Encryption'], true)) {
 
 
 

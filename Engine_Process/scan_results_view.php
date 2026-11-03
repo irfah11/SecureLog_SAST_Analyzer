@@ -15,7 +15,7 @@ $coverage = $presentation['coverage'];
 <div><strong><?= (int) $counts[$key] ?></strong><span><?= $label ?></span></div>
 <?php endforeach; ?>
 </div>
-<p class="scan-guidance">Select a file to view its checks. Files with failed checks appear first.</p>
+<p class="scan-guidance">Each file shows four check summaries. Status priority: FAIL, then N/A, then PASS. Expand event details to inspect the original evidence. Counts above are recorded event checks, not file summaries.</p>
 <?php if (!$presentation['files']): ?>
 <div class="scan-message">
 <?php if ($coverage && $coverage['outcome'] === 'completed'): ?>
@@ -31,9 +31,25 @@ $coverage = $presentation['coverage'];
 <details class="scan-file" <?= $file['failed'] > 0 || count($presentation['files']) === 1 ? 'open' : '' ?>>
 <summary><span class="scan-path"><?= $escape($file['path']) ?></span></summary>
 <div class="scan-file-content">
+<?php if ($file['summary']): ?>
+<table class="analysis-table file-check-summary"><thead><tr><th>Status</th><th>Check</th><th>Summary</th></tr></thead><tbody>
+<?php foreach ($file['summary'] as $summary): ?>
+<tr><td><span class="status <?= $escape(getStatusClass($summary['status'])) ?>"><i class="fas <?= $escape(getStatusIcon($summary['status'])) ?>"></i> <?= $escape($summary['status']) ?></span></td>
+<td><span class="check-name"><?= $escape($summary['name']) ?></span></td>
+<td><div class="detail-text"><?= $escape($summary['description']) ?></div>
+<div class="result-meta"><?php foreach (['FAIL','PASS','N/A'] as $status): ?><span class="meta-badge"><?= (int)$summary['counts'][$status] ?> <?= $escape($status) ?></span><?php endforeach; ?></div></td></tr>
+<?php endforeach; ?>
+</tbody></table>
+<?php endif; ?>
 <?php if ($file['rows']): ?>
+<details class="scan-event-details" style="margin:14px;border:1px solid #263b52;border-radius:8px;overflow:hidden;">
+<summary style="cursor:pointer;padding:12px;color:#9acfff;">View details · <?= count($file['rows']) ?> recorded checks / additional findings</summary>
+<p class="scan-guidance" style="padding:0 14px;">Original event results are retained below. Custom rules and historical extra checks are shown here separately from the four summaries.</p>
+<?php foreach ($file['events'] as $event): ?>
+<section class="scan-event-evidence" style="padding:0 10px 12px;">
+<h4 style="margin:14px 4px;color:#b9d5f2;font-size:13px;"><?= $escape($event['name']) ?> · Line <?= (int)$event['line'] ?></h4>
 <table class="analysis-table"><thead><tr><th>Status</th><th>Check</th><th>Detail</th></tr></thead><tbody>
-<?php foreach ($file['rows'] as $row): ?>
+<?php foreach ($event['rows'] as $row): ?>
 <tr id="result-<?= (int) ($row['ResultID'] ?? 0) ?>">
 <td><span class="status <?= $escape(getStatusClass($row['Status'])) ?>"><i class="fas <?= $escape(getStatusIcon($row['Status'])) ?>"></i> <?= $escape($row['Status']) ?></span></td>
 <td><span class="check-name"><?= $escape(getCheckName($row)) ?></span></td>
@@ -45,6 +61,10 @@ $coverage = $presentation['coverage'];
 </div></td></tr>
 <?php endforeach; ?>
 </tbody></table>
+
+</section>
+<?php endforeach; ?>
+</details>
 <?php endif; ?>
 <?php foreach ($file['notes'] as $note): ?>
 <div class="scan-message"><strong>Processing note</strong><p><?= $escape($note['Description'] ?? '') ?></p></div>

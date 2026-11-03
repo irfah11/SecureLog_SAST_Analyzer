@@ -36,12 +36,30 @@ $assert(array_key_first($presentation['files']) === 'denied.php', 'File with FAI
 $first = reset($presentation['files']['denied.php']['events']);
 $assert($first['rows'][0]['Status'] === 'FAIL', 'FAIL row appears first within event');
 $assert($presentation['counts'] === ['FAIL' => 1, 'PASS' => 1, 'N/A' => 6, 'SYSTEM' => 0], 'Counts match actual checks');
+$summaryInput = [
+    ['VulnerabilityName'=>'Security Logging','Status'=>'PASS'],
+    ['VulnerabilityName'=>'Security Logging','Status'=>'FAIL'],
+    ['VulnerabilityName'=>'Security Logging','Status'=>'N/A'],
+    ['VulnerabilityName'=>'Log Neutralization','Status'=>'PASS'],
+    ['VulnerabilityName'=>'Log Neutralization','Status'=>'N/A'],
+    ['VulnerabilityName'=>'Log Storage','Status'=>'PASS'],
+    ['VulnerabilityName'=>'Log Storage','Status'=>'PASS'],
+    ['VulnerabilityName'=>'[CUSTOM] Log Encryption','Status'=>'FAIL'],
+];
+$summary = securelogFileCheckSummaries($summaryInput);
+$assert(count($summary) === 4, 'Repeated events collapse into exactly four file summaries');
+$assert(array_column($summary,'status') === ['FAIL','N/A','PASS','N/A'], 'Summary priority is FAIL then unknown then all PASS; missing check is N/A');
+$assert($summary[0]['counts'] === ['FAIL'=>1,'N/A'=>1,'PASS'=>1], 'Summary retains counts of underlying event results');
+$assert(securelogFileCheckSummaries([['VulnerabilityName'=>'[CUSTOM] Security Logging','Status'=>'FAIL']]) === [], 'Custom-only findings do not invent four built-in results');
 $scan_info = ['ScanID' => 1234, 'total_files' => 4];
 ob_start(); require __DIR__ . '/../Engine_Process/scan_results_view.php'; $html = ob_get_clean();
 $assert(str_contains($html, 'dashboard.php') && str_contains($html, 'No supported event'), 'Coverage lists analyzed dashboard without findings');
 $assert(str_contains($html, 'logger.php'), 'Coverage also lists helper file');
 $assert(str_contains($html, 'class="scan-file" open') && !str_contains($html, 'class="scan-event"'), 'Failed files open directly to their checks without nested event panels');
 $assert(str_contains($html, 'class="scan-file" >'), 'Non-failed file groups remain collapsible and closed');
+$assert(substr_count($html,'class="analysis-table file-check-summary"') === 2, 'Each analyzed file has one compact check summary');
+$assert(str_contains($html, '<details class="scan-event-details"') && !str_contains($html, '<details class="scan-event-details" open'), 'Original event evidence is collapsed by default');
+$assert(str_contains($html,'id="result-1"') && str_contains($html,'Line '), 'Result anchors and line evidence remain available in details');
 $assert(str_contains($html, 'Scan Coverage') && str_contains($html, 'Only submitted files are covered'), 'Coverage explanation is visible');
 $legacy = securelogPresentation($rows, null);
 $assert($legacy['events'] === 2 && $legacy['coverage'] === null, 'Old rows can be grouped without inventing coverage');

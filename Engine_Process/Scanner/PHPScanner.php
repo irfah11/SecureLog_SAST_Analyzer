@@ -108,17 +108,18 @@ function createPhpCheckResult(
    MAIN PHP SCANNER
    ============================================================ */
 
-function scanPHP(string $fileName, string $content, array $projectSources = []): array
+function scanPHP(string $fileName, string $content, array $projectSources = [], bool $extendedLogging = false): array
 {
     $results = [];
-    $events = securelogPhpDiscoverEvents($content);
+    $events = securelogPhpDiscoverEvents($content, $extendedLogging);
     $definitions = securelogPhpProjectDefinitions($fileName, $content, $projectSources);
+    $cryptoApis = securelogPhpCryptoApiEvidence($content);
 
     foreach ($events as $eventIndex => $event) {
         $resultStart = count($results);
         $rule = $event['rule'];
         $eventName = $rule === 77801 ? 'Authentication Failure'
-            : ($rule === 77802 ? 'Access Control Failure' : 'Exception Handling');
+            : ($rule === 77802 ? 'Access Control Failure' : ($rule === 77804 ? 'Input Validation Failure' : ($rule === 77805 ? 'Authentication Success' : 'Exception Handling')));
 
         $description = $rule === 77801
             ? 'SecureLog detected an authentication failure path without an associated security logging operation.'
@@ -132,6 +133,11 @@ function scanPHP(string $fileName, string $content, array $projectSources = []):
                 ? 'Record denied or unauthorized access attempts using an appropriate security logging mechanism.'
                 : 'Record security-relevant or operational exceptions using an appropriate logger while avoiding sensitive information.');
 
+        if ($rule === 77804 || $rule === 77805) {
+            $description = 'SecureLog detected ' . strtolower($eventName) . ' without associated security logging.';
+            $recommendation = 'Record this event with appropriate user context, without passwords, tokens or rejected sensitive values.';
+        }
+
         // Resolve same-file custom logger wrappers, without trusting their names.
         $sinkEvidence = securelogPhpResolveSink($event['body'], $definitions);
 
@@ -142,6 +148,15 @@ function scanPHP(string $fileName, string $content, array $projectSources = []):
         $sinkEvidence['path_uncertain'] = $pathStatus === 'N/A' && $sinkEvidence['status'] === 'PASS';
         if ($pathStatus !== 'PASS') {
             $sinkEvidence['status'] = $pathStatus;
+        }
+        // A library catch that immediately propagates an exception delegates
+        // handling to its caller. Lack of local logging is not proof of omission
+        // across the call chain; do not assume that the caller logs it either.
+        if ($rule === 77803 && $sinkEvidence['status'] !== 'PASS'
+            && securelogPhpImmediateRethrow($event['body'])) {
+            $sinkEvidence['status'] = 'N/A';
+            $sinkEvidence['propagates_exception'] = true;
+            $sinkEvidence['path_gap'] = false;
         }
 
         // IMPORTANT: Analyze only statements on the detected event path.
@@ -158,11 +173,29 @@ function scanPHP(string $fileName, string $content, array $projectSources = []):
             $recommendation,
             $sinkEvidence
         );
-        // Presentation metadata only; checks and their detection stay unchanged.
+        if ($extendedLogging && in_array($rule, [77801,77802,77804,77805], true)) {
+            // Logging existence/path coverage and context completeness share one check.
+            // Dependent checks still assess the actual sink even if context is incomplete.
+            if ($results[$resultStart]['status'] === 'PASS') {
+                [$contextStatus, $contextDescription] = securelogPhpAssessContext($event, $sinkEvidence);
+                $results[$resultStart] = createPhpCheckResult(
+                    $contextStatus, 'Security Logging', $contextStatus === 'FAIL' ? 22301 : null,
+                    $contextStatus === 'FAIL' ? 'CWE-223' : 'CWE-778',
+                    $contextStatus === 'FAIL' ? 'MEDIUM' : 'INFO', $fileName, $event['line'],
+                    $eventName . ': a logging operation was verified. ' . $contextDescription,
+                    'Record event, timestamp, result, reason, source and event-specific context. Use server identity when authenticated and keep attempted login identity separate. Never log credentials or tokens.'
+                );
+            }
+        }
+        // Presentation metadata groups extended and baseline checks together.
         for ($i = $resultStart; $i < count($results); $i++) {
             $results[$i]['event_key'] = 'php-' . $eventIndex;
             $results[$i]['event_name'] = $eventName;
             $results[$i]['event_line'] = $event['line'];
+            if ($results[$i]['check'] === 'Log Encryption' && $cryptoApis !== []) {
+                $results[$i]['description'] .= ' This file contains calls to ' . implode(' and ', $cryptoApis)
+                    . '; these are separate cryptographic capabilities, not proof that this event log or every active/archive copy is encrypted.';
+            }
         }
     }
 
@@ -764,7 +797,7 @@ function securelogPhpExplicitPlaintextWrite(string $code): bool
  * Discover supported security paths once per syntactic condition/catch.
  * The original isPhp*() patterns remain the event vocabulary.
  */
-function securelogPhpDiscoverEvents(string $content): array
+function securelogPhpDiscoverEvents(string $content, bool $extendedLogging = false): array
 {
     $tokens = securelogPhpTokens($content);
     $events = [];
@@ -795,6 +828,21 @@ function securelogPhpDiscoverEvents(string $content): array
             $rules = [];
             $isAuth = isPhpAuthenticationFailure($condition);
             if ($isAuth) $rules[] = 77801;
+            if ($extendedLogging && securelogPhpValidationFailure($condition)) $rules[] = 77804;
+            $authSuccess = $extendedLogging && securelogPhpAuthenticationSuccess($condition);
+            if ($authSuccess) $rules[] = 77805;
+            if ($extendedLogging && ($isAuth || $authSuccess)) {
+                $elseAt = securelogPhpNextToken($tokens, $bodyFinish + 1);
+                if ($elseAt !== null && $tokens[$elseAt]['id'] === T_ELSE) {
+                    $elseBounds = securelogPhpBodyBounds($tokens, $elseAt + 1);
+                    if ($elseBounds !== null) {
+                        $events[] = ['rule' => $isAuth ? 77805 : 77801,
+                            'line' => $tokens[$elseAt]['line'],
+                            'body' => securelogPhpSlice($tokens, $elseBounds[0], $elseBounds[1])];
+                    }
+                }
+            }
+
             // A 403 response inside a failed-login path is not, by itself,
             // a second independent authorization event.
             if (isPhpAccessControlFailure($condition)
@@ -884,22 +932,30 @@ function analyzePhpSecurityEventStatus(
             $lineNumber,
 
             $loggingStatus === 'N/A'
-                ? (!empty($sinkEvidence['path_uncertain'])
+                ? (!empty($sinkEvidence['propagates_exception'])
+                    ? $eventName . ': this catch immediately propagates an exception. Caller-side handling and logging have not been verified; local absence is not a confirmed logging omission.'
+                    : (!empty($sinkEvidence['path_uncertain'])
                     ? $eventName . ': logging was found, but complete path coverage could not be verified.'
-                    : $eventName . ': a potential external logging wrapper was found, but its implementation could not be verified in this file.')
+                    : $eventName . ': a potential external logging wrapper was found, but its implementation could not be verified in this file.'))
                 : (!empty($sinkEvidence['path_gap'])
                     ? $eventName . ': a logging operation exists, but at least one reachable event path can bypass it.'
                     : $eventName . ': ' . $cwe778FailureDescription),
 
-            $loggingStatus === 'N/A' ? 'Include the logger implementation in a project-folder scan to verify this call.' : $cwe778Recommendation
+            $loggingStatus === 'N/A'
+                ? (!empty($sinkEvidence['propagates_exception'])
+                    ? 'Review the caller or top-level exception handler and record the failure once at the appropriate boundary. Do not add duplicate logs in every rethrowing catch.'
+                    : 'Include the logger implementation in a project-folder scan to verify this call.')
+                : $cwe778Recommendation
         );
 
 
-        $dependentReason = !empty($sinkEvidence['path_gap'])
+        $dependentReason = !empty($sinkEvidence['propagates_exception'])
+            ? 'The exception is propagated. The caller logging sink and its payload, destination and encryption have not been verified.'
+            : (!empty($sinkEvidence['path_gap'])
             ? 'Not evaluated because logging can be bypassed on this security-event path.'
             : (!empty($sinkEvidence['path_uncertain'])
                 ? 'Not evaluated because logging path coverage could not be verified.'
-                : 'Not evaluated because no security logging operation exists for this event.');
+                : 'Not evaluated because no security logging operation exists for this event.'));
 
         /*
          * CWE-117 cannot be evaluated because there is
@@ -944,7 +1000,7 @@ function analyzePhpSecurityEventStatus(
 
         $results[] = createPhpCheckResult(
             'N/A',
-            'Log Protection',
+            'Log Encryption',
             null,
             'SecureLog Policy',
             'INFO',
@@ -1132,7 +1188,7 @@ function analyzePhpSecurityEventStatus(
     }
 
     $results[] = createPhpCheckResult(
-        $protectionStatus, 'Log Protection',
+        $protectionStatus, 'Log Encryption',
         $protectionStatus === 'FAIL' ? 90002 : null,
         'SecureLog Policy', $protectionStatus === 'FAIL' ? 'MEDIUM' : 'INFO',
         $fileName, $lineNumber, $protectionDescription,
@@ -2481,4 +2537,187 @@ function getPhpLogicalStatements(
 
 
     return $statements;
+}
+
+/* ============================================================
+   EXTENDED LOGGING: CONTEXT AS PART OF SECURITY LOGGING
+   ============================================================ */
+
+/** Narrow static context assessment. Never executes uploaded PHP. */
+/** Recognize only an immediate throw, not conditional throws or nested callbacks. */
+function securelogPhpImmediateRethrow(string $body): bool
+{
+    $tokens = securelogPhpTokens('<?php ' . $body);
+    $first = securelogPhpNextToken($tokens, 1);
+    return $first !== null && $tokens[$first]['id'] === T_THROW;
+}
+
+/** Observations only: never used to promote event encryption status to PASS. */
+function securelogPhpCryptoApiEvidence(string $content): array
+{
+    $code = '';
+    foreach (securelogPhpTokens($content) as $token) {
+        $code .= $token['id'] === T_OPEN_TAG ? ' ' : $token['text'];
+    }
+    $found = [];
+    foreach (securelogPhpBuiltinCalls($code) as $call) {
+        if (in_array($call['name'], ['openssl_encrypt','openssl_decrypt'], true)) $found[$call['name']] = true;
+    }
+    return array_keys($found);
+}
+
+function securelogPhpAuthenticationSuccess(string $condition): bool
+{
+    $clean = '';
+    foreach (securelogPhpTokens('<?php ' . $condition) as $token) {
+        if (!in_array($token['id'], [T_OPEN_TAG,T_COMMENT,T_DOC_COMMENT], true)) $clean .= $token['text'];
+    }
+    if (!securelogPhpSinglePredicate($clean, ['', '===true'])) return false;
+    return preg_match('/^\s*(?:password_verify|authenticate|authenticateUser|loginUser|verifyLogin|Auth\s*::\s*attempt)\s*\([\s\S]*\)\s*(?:===\s*true)?\s*$/', $clean) === 1;
+}
+
+/** Reject boolean compounds whose final ')' belongs to another call. */
+function securelogPhpSinglePredicate(string $condition, array $allowedSuffixes): bool
+{
+    $tokens = securelogPhpTokens('<?php ' . $condition);
+    foreach ($tokens as $i => $token) {
+        if ($token['text'] !== '(') continue;
+        $close = securelogPhpMatchPair($tokens,$i,'(',')');
+        if ($close === null) return false;
+        $tail = preg_replace('/\s+/', '', securelogPhpSlice($tokens,$close+1,count($tokens)-1));
+        return in_array($tail,$allowedSuffixes,true);
+    }
+    return false;
+}
+
+function securelogPhpValidationFailure(string $condition): bool
+{
+    $clean = '';
+    foreach (securelogPhpTokens('<?php ' . $condition) as $token) {
+        if (!in_array($token['id'], [T_OPEN_TAG, T_COMMENT, T_DOC_COMMENT], true)) $clean .= $token['text'];
+    }
+    $clean = trim($clean);
+    if (!securelogPhpSinglePredicate($clean, ['', '===false', '!==1', '===0'])) return false;
+    // Only complete, explicitly failing predicates. No arbitrary business conditions.
+    if (!preg_match('/^(?:!\s*(filter_var|in_array|preg_match)\s*\([\s\S]*\)|(filter_var|in_array|preg_match)\s*\([\s\S]*\)\s*(?:===\s*false|!==\s*1|===\s*0))$/', $clean)) return false;
+    $calls = securelogPhpBuiltinCalls($clean);
+    if (!$calls) return false;
+    $call = $calls[0];
+    if ($call['name'] === 'filter_var') {
+        // FILTER_SANITIZE_* transforms data; it is not a validation predicate.
+        return isset($call['args'][1]) && preg_match('/^FILTER_VALIDATE_[A-Z_]+$/', $call['args'][1]) === 1;
+    }
+    // Other predicates must explicitly validate request input in this initial version.
+    return preg_match('/\$_(?:POST|GET|REQUEST)\s*\[/', implode(' ', $call['args'])) === 1;
+}
+
+/** Parse a literal flat PHP array without eval. Dynamic keys/spreads are unknown. */
+function securelogPhpContextArray(string $expression): ?array
+{
+    $expression = trim($expression);
+    if (!str_starts_with($expression, '[') || !str_ends_with($expression, ']')) return null;
+    $tokens = securelogPhpTokens('<?php f(' . substr($expression, 1, -1) . ');');
+    $open = null;
+    foreach ($tokens as $i => $token) if ($token['text'] === '(') { $open = $i; break; }
+    if ($open === null) return null;
+    $close = securelogPhpMatchPair($tokens, $open, '(', ')');
+    if ($close === null) return null;
+    $map = [];
+    foreach (securelogPhpCallArguments($tokens, $open, $close) as $entry) {
+        if (trim($entry) === '') continue;
+        if (!preg_match('/^\s*([\'"])([a-z_]+)\1\s*=>\s*([\s\S]+)$/i', $entry, $match)) return null;
+        $key = strtolower($match[2]);
+        if (array_key_exists($key, $map)) return null;
+        $map[$key] = trim($match[3]);
+    }
+    return $map;
+}
+
+/** Collect only payload arguments to actual supported sinks, not neighboring code. */
+function securelogPhpContextPayloads(string $body): array
+{
+    $payloads = [];
+    foreach (securelogPhpBuiltinCalls($body) as $call) {
+        $args = $call['args'];
+        if ($call['name'] === 'error_log') $payloads[] = $args[0] ?? '';
+        elseif ($call['name'] === 'syslog') $payloads[] = $args[1] ?? '';
+        elseif ($call['name'] === 'file_put_contents') {
+            if (preg_match('/(?:log|audit|\.txt)/i', $args[0] ?? '')) $payloads[] = $args[1] ?? '';
+        }
+    }
+    $tokens = securelogPhpTokens('<?php ' . $body);
+    foreach ($tokens as $i => $token) {
+        if ($token['id'] !== T_STRING || !in_array(strtolower($token['text']),
+            ['debug','info','notice','warning','error','critical','alert','emergency','log'], true)) continue;
+        $prev = $i - 1;
+        while ($prev >= 0 && in_array($tokens[$prev]['id'], [T_WHITESPACE,T_COMMENT,T_DOC_COMMENT], true)) $prev--;
+        if ($prev < 0 || !in_array($tokens[$prev]['id'], [T_OBJECT_OPERATOR,T_DOUBLE_COLON], true)) continue;
+        $receiver = $prev - 1;
+        while ($receiver >= 0 && in_array($tokens[$receiver]['id'], [T_WHITESPACE,T_COMMENT,T_DOC_COMMENT], true)) $receiver--;
+        if ($receiver < 0 || !preg_match('/^(?:\$?(?:logger|log|audit|monolog)|\$?[A-Za-z_][A-Za-z0-9_]*(?:Logger|Log|Audit))$/', $tokens[$receiver]['text'])) continue;
+        $open = securelogPhpNextToken($tokens, $i + 1);
+        if ($open === null || $tokens[$open]['text'] !== '(') continue;
+        $close = securelogPhpMatchPair($tokens, $open, '(', ')');
+        if ($close === null) continue;
+        $args = securelogPhpCallArguments($tokens, $open, $close);
+        $payloads[] = $args[strtolower($token['text']) === 'log' ? 2 : 1] ?? ($args[0] ?? '');
+    }
+    return $payloads;
+}
+
+/** Presence means statically recognized attributes, not verified runtime identities. */
+function securelogPhpAssessContext(array $event, array $sink): array
+{
+    if ($sink['status'] !== 'PASS') return ['N/A', 'Context cannot be assessed until logging on the event path is verified.'];
+    if (!empty($sink['indirect'])) return ['N/A', 'A logger wrapper was resolved, but argument binding and automatically added context are not verified. Include and review the logger implementation.'];
+    $payloads = securelogPhpContextPayloads($event['body']);
+    $observations = [];
+    foreach ($payloads as $payload) {
+        $payload = trim($payload);
+        if (preg_match('/^json_encode\s*\(([\s\S]*)\)$/i', $payload, $json)) {
+            $tokens = securelogPhpTokens('<?php f(' . $json[1] . ');');
+            foreach ($tokens as $i => $token) if ($token['text'] === '(') {
+                $close = securelogPhpMatchPair($tokens,$i,'(',')');
+                $payload = $close === null ? '' : (securelogPhpCallArguments($tokens,$i,$close)[0] ?? '');
+                break;
+            }
+        }
+        $map = securelogPhpContextArray($payload);
+        if ($map === null) { $observations[] = ['N/A', 'Log context uses an unsupported expression or plain text. Attribute completeness and logger-added fields could not be verified.']; continue; }
+        $required = ['event','result','reason','source_ip'];
+        $required[] = $event['rule'] === 77804 ? 'field' : ($event['rule'] === 77802 ? 'target' : ($event['rule'] === 77801 ? 'claimed_identity' : 'action'));
+        $missing = [];
+        foreach ($required as $key) {
+            if (!isset($map[$key]) || preg_match('/^(?:null|false|[\'"]\s*[\'"])$/i', $map[$key])) $missing[] = $key;
+        }
+        // An authenticated user ID is optional for a login failure, mandatory
+        // for attributable authenticated actions. Explicit anonymous context is valid.
+        $anonymous = isset($map['actor_type']) && preg_match('/^([\'"])unauthenticated\1$/', $map['actor_type']);
+        if ($event['rule'] !== 77801 && !$anonymous && (!isset($map['actor_id']) || strtolower($map['actor_id']) === 'null')) $missing[] = 'actor_id (or explicit unauthenticated actor_type)';
+        if ($missing) { $observations[] = ['FAIL', 'Literal log context omits required non-empty attributes: ' . implode(', ', $missing) . '.']; continue; }
+        $expectedResults = $event['rule'] === 77805 ? ['SUCCESS','OK'] : ['FAILURE','FAIL','DENIED','ERROR'];
+        if (!preg_match('/^([\'"])([A-Z_]+)\1$/i', $map['result'], $resultValue)) {
+            $observations[] = ['N/A','The event result is computed dynamically and cannot be verified.']; continue;
+        }
+        if (!in_array(strtoupper($resultValue[2]),$expectedResults,true)) {
+            $observations[] = ['FAIL','The literal result contradicts the detected success or failure event.']; continue;
+        }
+        // Do not treat a claimed role/ID supplied by a client as authenticated identity.
+        if ((isset($map['actor_id']) && preg_match('/\$_(?:POST|GET|REQUEST|COOKIE)\b/', $map['actor_id']))
+            || (isset($map['actor_role']) && preg_match('/\$_(?:POST|GET|REQUEST|COOKIE)\b/', $map['actor_role']))) {
+            $observations[] = ['FAIL','actor_id is taken directly from client input. Use server-established identity; keep attempted login identity in claimed_identity.']; continue;
+        }
+        $trustedActor = $event['rule'] === 77801 || $anonymous
+            || (isset($map['actor_id']) && preg_match('/^\$_SESSION\s*\[\s*([\'"])(?:UserID|user_id|id)\1\s*\]$/', $map['actor_id']));
+        $timeKnown = isset($map['timestamp']) && preg_match('/^(?:date|gmdate)\s*\(\s*([\'"])(?:c|Y-m-d[^\'"]*)\1\s*\)$/', $map['timestamp']);
+        $ipKnown = preg_match('/^\$_SERVER\s*\[\s*([\'"])REMOTE_ADDR\1\s*\]$/', $map['source_ip']);
+        if (!$trustedActor || !$timeKnown || !$ipKnown) {
+            $observations[] = ['N/A','Required attribute names are present, but identity, timestamp or source provenance uses an unsupported expression.']; continue;
+        }
+        $observations[] = ['PASS', 'Recognized structured context contains the required event attributes. This checks static structure; runtime values and identity correctness still require testing.'];
+    }
+    if (!$observations) return ['N/A','No supported structured log payload could be inspected.'];
+    // Multiple sinks may be ancillary messages; do not infer completeness from one.
+    if (count($observations) !== 1) return ['N/A','Multiple logging calls need manual correlation; complete context on every relevant path could not be verified.'];
+    return $observations[0];
 }
