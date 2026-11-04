@@ -47,8 +47,8 @@ $summaryInput = [
     ['VulnerabilityName'=>'[CUSTOM] Log Encryption','Status'=>'FAIL'],
 ];
 $summary = securelogFileCheckSummaries($summaryInput);
-$assert(count($summary) === 4, 'Repeated events collapse into exactly four file summaries');
-$assert(array_column($summary,'status') === ['FAIL','N/A','PASS','N/A'], 'Summary priority is FAIL then unknown then all PASS; missing check is N/A');
+$assert(count($summary) === 3, 'Repeated events collapse into exactly three core file summaries');
+$assert(array_column($summary,'status') === ['FAIL','PASS','N/A'], 'Summary priority is FAIL then unknown then all PASS; missing check is N/A');
 $assert($summary[0]['counts'] === ['FAIL'=>1,'N/A'=>1,'PASS'=>1], 'Summary retains counts of underlying event results');
 $assert(securelogFileCheckSummaries([['VulnerabilityName'=>'[CUSTOM] Security Logging','Status'=>'FAIL']]) === [], 'Custom-only findings do not invent four built-in results');
 $scan_info = ['ScanID' => 1234, 'total_files' => 4];
@@ -58,7 +58,7 @@ $assert(str_contains($html, 'logger.php'), 'Coverage also lists helper file');
 $assert(str_contains($html, 'class="scan-file" open') && !str_contains($html, 'class="scan-event"'), 'Failed files open directly to their checks without nested event panels');
 $assert(str_contains($html, 'class="scan-file" >'), 'Non-failed file groups remain collapsible and closed');
 $assert(substr_count($html,'class="analysis-table file-check-summary"') === 2, 'Each analyzed file has one compact check summary');
-$assert(str_contains($html, '<details class="scan-event-details"') && !str_contains($html, '<details class="scan-event-details" open'), 'Original event evidence is collapsed by default');
+$assert(str_contains($html, '<details class="check-reasons"') && !str_contains($html, 'class="scan-event-details"'), 'Reasons appear inside check rows without duplicate event tables');
 $assert(str_contains($html,'id="result-1"') && str_contains($html,'Line '), 'Result anchors and line evidence remain available in details');
 $customCoverage = $coverage;
 $customCoverage['files'][2]['custom_rules'] = [['id'=>42,'code'=>'PHP_LOG_PASSWORD_DIRECT',
@@ -66,7 +66,7 @@ $customCoverage['files'][2]['custom_rules'] = [['id'=>42,'code'=>'PHP_LOG_PASSWO
 $presentation = securelogPresentation($rows,$customCoverage);
 ob_start(); require __DIR__ . '/../Engine_Process/scan_results_view.php'; $customHtml = ob_get_clean();
 $assert(isset($presentation['files']['dashboard.php']) && $presentation['files']['dashboard.php']['summary'] === [], 'File without built-in event still exposes its evaluated custom rules');
-$assert(str_contains($customHtml,'Custom rules used in this scan') && str_contains($customHtml,'PHP_LOG_PASSWORD_DIRECT')
+$assert(str_contains($customHtml,'custom-rule-inline') && str_contains($customHtml,'*NEW RULE') && !str_contains($customHtml,'Custom rules used in this scan') && str_contains($customHtml,'PHP_LOG_PASSWORD_DIRECT')
     && str_contains($customHtml,'No match'), 'No-match custom rule appears directly in file results');
 $assert($presentation['counts'] === ['FAIL'=>1,'PASS'=>1,'N/A'=>6,'SYSTEM'=>0], 'No-match evaluation adds no invented security PASS or finding');
 $customCoverage['files'][2]['custom_rules'][0]['code'] = '<img src=x onerror=alert(1)>';

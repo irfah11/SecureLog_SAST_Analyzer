@@ -108,14 +108,36 @@ function developerSidebarActive(
        ========================================================= */
 
     .developer-sidebar__brand {
-        margin: 0 14px 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 0 26px;
+        min-height: 78px;
+        text-decoration: none;
+        flex-shrink: 0;
+    }
 
-        color: var(--developer-blue-light);
+    .developer-sidebar__brand-image {
+        width: 210px;
+        height: 78px;
+        background: url("<?= htmlspecialchars($baseUrl, ENT_QUOTES, 'UTF-8') ?>/Asset/securelog.png") no-repeat center -174px / 310px auto;
+        filter: hue-rotate(190deg) saturate(1.25);
+        flex-shrink: 0;
+    }
 
-        font-size: 25px;
-        font-weight: 800;
-        letter-spacing: 0.4px;
-        text-transform: uppercase;
+    .developer-sidebar__brand:focus-visible {
+        outline: 2px solid var(--developer-blue-light);
+        outline-offset: 3px;
+        border-radius: 6px;
+    }
+
+    @media (max-width: 800px) {
+        .developer-sidebar__brand-image {
+            width: 190px;
+            height: 70px;
+            background-size: 280px auto;
+            background-position: center -157px;
+        }
     }
 
     /* =========================================================
@@ -342,9 +364,11 @@ function developerSidebarActive(
 <aside class="developer-sidebar">
 
     <!-- Brand -->
-    <div class="developer-sidebar__brand">
-        SAST Tool
-    </div>
+    <a class="developer-sidebar__brand"
+       href="<?= htmlspecialchars($baseUrl, ENT_QUOTES, 'UTF-8') ?>/Dashboard/dashboard_Developer.php"
+       aria-label="SecureLog Developer Dashboard">
+        <span class="developer-sidebar__brand-image" role="img" aria-label="SecureLog"></span>
+    </a>
 
     <!-- Main navigation -->
     <nav class="developer-sidebar__navigation">

@@ -7,6 +7,7 @@ Uploaded code is analyzed, never executed. Do not browse the fixture PHP URLs.
 |---|---|---|---|---|
 | validation_with_context.php | PASS | PASS | N/A | N/A |
 | access_missing_context.php | FAIL (missing context) | PASS | N/A | N/A |
+| login_wrapper_context.php | PASS | N/A | N/A | N/A |
 
 Each recognized event produces four checks. Context is assessed within Security Logging,
 not a separate finding. Retention is outside the source-only scan. Custom ACTIVE rules
@@ -25,7 +26,11 @@ PASS describes recognized static evidence, not runtime values or overall applica
   This is not exhaustive discovery of all server validation or all application login flows.
 - Context: direct literal arrays sent through `error_log(json_encode([...]))` or supported
   logger context arguments. Keys use the demonstrated flat schema. Other schemas, dynamic
-  payloads, aliases, automatic logger enrichment and wrapper argument binding remain unknown.
+  payloads and aliases remain unknown. Plain-function wrappers with a single call statement
+  can bind literal caller context or add supported attributes themselves. Static included
+  wrappers use only definitions accepted by include resolution. Class/namespace binding,
+  parameter reassignment, references, defaults and variadics remain unsupported. This context
+  binding does not establish separate neutralization/encryption flow through wrappers.
 - Required base fields: event, result, reason, source_ip. Event-specific fields:
   claimed_identity for failed login; actor_id + action for successful login;
   actor_id + target for access denial; actor_id + field for validation failure.

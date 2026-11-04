@@ -108,11 +108,13 @@ function createPhpCheckResult(
    MAIN PHP SCANNER
    ============================================================ */
 
-function scanPHP(string $fileName, string $content, array $projectSources = [], bool $extendedLogging = false): array
+function scanPHP(string $fileName, string $content, array $projectSources = [], bool $extendedLogging = false, bool $includeNeutralization = true): array
 {
     $results = [];
     $events = securelogPhpDiscoverEvents($content, $extendedLogging);
     $definitions = securelogPhpProjectDefinitions($fileName, $content, $projectSources);
+    $contextSignatures = $extendedLogging
+        ? securelogPhpContextSignatures([$content, ...array_values($projectSources)], $definitions) : [];
     $cryptoApis = securelogPhpCryptoApiEvidence($content);
 
     foreach ($events as $eventIndex => $event) {
@@ -177,7 +179,16 @@ function scanPHP(string $fileName, string $content, array $projectSources = [], 
             // Logging existence/path coverage and context completeness share one check.
             // Dependent checks still assess the actual sink even if context is incomplete.
             if ($results[$resultStart]['status'] === 'PASS') {
-                [$contextStatus, $contextDescription] = securelogPhpAssessContext($event, $sinkEvidence);
+                $contextEvent = $event;
+                $contextSink = $sinkEvidence;
+                if (!empty($sinkEvidence['indirect'])) {
+                    $bound = securelogPhpBindContextWrapper($event['body'], $contextSignatures);
+                    if ($bound !== null) {
+                        $contextEvent['body'] = $bound;
+                        $contextSink['indirect'] = false;
+                    }
+                }
+                [$contextStatus, $contextDescription] = securelogPhpAssessContext($contextEvent, $contextSink);
                 $results[$resultStart] = createPhpCheckResult(
                     $contextStatus, 'Security Logging', $contextStatus === 'FAIL' ? 22301 : null,
                     $contextStatus === 'FAIL' ? 'CWE-223' : 'CWE-778',
@@ -201,6 +212,11 @@ function scanPHP(string $fileName, string $content, array $projectSources = [], 
 
     // A file without supported events belongs to scan coverage, not findings.
 
+    // Upload scans use three core checks. Legacy direct callers can retain
+    // neutralization for historical regression comparisons.
+    if (!$includeNeutralization) {
+        $results = array_values(array_filter($results, static fn($row) => $row['check'] !== 'Log Neutralization'));
+    }
     return $results;
 }
 
@@ -2544,6 +2560,85 @@ function getPhpLogicalStatements(
    ============================================================ */
 
 /** Narrow static context assessment. Never executes uploaded PHP. */
+/** Resolve signatures only for definitions already accepted by static include resolution.
+ * Class/namespace binding, defaults, references, variadics and rebinding are unsupported.
+ */
+function securelogPhpContextSignatures(array $sources, array $definitions): array
+{
+    $signatures = [];
+    $ambiguous = [];
+    foreach (array_unique($sources) as $source) {
+        $tokens = securelogPhpTokens($source);
+        if (array_intersect(array_column($tokens,'id'), [T_CLASS,T_TRAIT,T_INTERFACE,T_NAMESPACE])) continue;
+        foreach ($tokens as $i => $token) {
+            if ($token['id'] !== T_FUNCTION) continue;
+            $nameAt = securelogPhpNextToken($tokens,$i+1);
+            if ($nameAt === null || $tokens[$nameAt]['id'] !== T_STRING) continue;
+            $name = strtolower($tokens[$nameAt]['text']);
+            if (!isset($definitions[$name])) continue;
+            $open = securelogPhpNextToken($tokens,$nameAt+1);
+            if ($open === null || $tokens[$open]['text'] !== '(') continue;
+            $close = securelogPhpMatchPair($tokens,$open,'(',')');
+            if ($close === null) continue;
+            $bodyOpen = securelogPhpNextToken($tokens,$close+1);
+            while ($bodyOpen !== null && !in_array($tokens[$bodyOpen]['text'],['{',';'],true)) $bodyOpen = securelogPhpNextToken($tokens,$bodyOpen+1);
+            if ($bodyOpen === null || $tokens[$bodyOpen]['text'] !== '{') continue;
+            $bodyClose = securelogPhpMatchPair($tokens,$bodyOpen,'{','}');
+            if ($bodyClose === null) continue;
+            $body = securelogPhpReachableBody($tokens,$bodyOpen+1,$bodyClose-1);
+            if ($body !== $definitions[$name]) continue;
+            $params = [];
+            foreach (securelogPhpCallArguments($tokens,$open,$close) as $param) {
+                if ($param === '') continue;
+                if (!preg_match('/^(?:(?:string|int|float|bool|array)\s+)?(\$[A-Za-z_]\w*)$/',trim($param),$match)) continue 2;
+                $params[] = $match[1];
+            }
+            $candidate = ['params'=>$params,'body'=>$body];
+            if (isset($signatures[$name]) && $signatures[$name] !== $candidate) $ambiguous[$name] = true;
+            $signatures[$name] = $candidate;
+        }
+    }
+    foreach ($ambiguous as $name => $_) unset($signatures[$name]);
+    return $signatures;
+}
+
+/** Symbolic binding for a single-statement plain-function logger wrapper.
+ * Uploaded code is never executed. Unsupported constructs remain unknown.
+ */
+function securelogPhpBindContextWrapper(string $code, array $signatures, array $visited = []): ?string
+{
+    if (count($visited) >= 4) return null;
+    $tokens = securelogPhpTokens('<?php ' . $code);
+    if (array_intersect(array_column($tokens,'id'), [T_IF,T_ELSEIF,T_SWITCH,T_FOR,T_FOREACH,T_WHILE,T_DO,T_TRY,T_MATCH,T_FUNCTION])) return null;
+    $resolved = [];
+    foreach (securelogPhpBuiltinCalls($code) as $call) {
+        $name = $call['name'];
+        if (!isset($signatures[$name]) || isset($visited[$name])) continue;
+        $signature = $signatures[$name];
+        if (count($call['args']) !== count($signature['params'])) continue;
+        $body = trim($signature['body']);
+        $expression = preg_replace('/^return\s+/', '', $body);
+        if (!preg_match('/^[A-Za-z_]\w*\s*\(/', $expression)) continue;
+        if (!securelogPhpSinglePredicate($expression,[';'])) continue;
+        $replacement = array_combine($signature['params'],$call['args']);
+        $bound = '';
+        foreach (securelogPhpTokens('<?php ' . $body) as $token) {
+            if ($token['id'] === T_OPEN_TAG) continue;
+            $bound .= $token['id'] === T_VARIABLE && isset($replacement[$token['text']])
+                ? $replacement[$token['text']] : $token['text'];
+        }
+        if (securelogPhpContextPayloads($bound)) {
+            $resolved[] = $bound;
+        } else {
+            $next = $visited; $next[$name] = true;
+            $nested = securelogPhpBindContextWrapper($bound,$signatures,$next);
+            if ($nested !== null) $resolved[] = $nested;
+        }
+    }
+    // Never choose one context from multiple wrappers arbitrarily.
+    return count($resolved) === 1 ? $resolved[0] : null;
+}
+
 /** Recognize only an immediate throw, not conditional throws or nested callbacks. */
 function securelogPhpImmediateRethrow(string $body): bool
 {

@@ -106,7 +106,7 @@ function securelogPresentation(array $rows, ?array $coverage): array
 /** Display aggregation only. Original event rows and saved scan counts are retained. */
 function securelogFileCheckSummaries(array $rows): array
 {
-    $groups = array_fill_keys(['Security Logging', 'Log Neutralization', 'Log Storage', 'Log Encryption'], []);
+    $groups = array_fill_keys(['Security Logging', 'Log Storage', 'Log Encryption'], []);
     foreach ($rows as $row) {
         // Configurable database rules are additional findings, not built-in checks.
         if (str_starts_with((string) ($row['VulnerabilityName'] ?? ''), '[')) continue;

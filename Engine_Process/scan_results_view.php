@@ -15,7 +15,7 @@ $coverage = $presentation['coverage'];
 <div><strong><?= (int) $counts[$key] ?></strong><span><?= $label ?></span></div>
 <?php endforeach; ?>
 </div>
-<p class="scan-guidance">Each file shows four check summaries. Status priority: FAIL, then N/A, then PASS. Expand event details to inspect the original evidence. Counts above are recorded event checks, not file summaries.</p>
+<!--<p class="scan-guidance">Each file shows three core check summaries. Neutralization is available through custom rules. Status priority: FAIL, then N/A, then PASS. Select Lihat sebab on a check to inspect its event evidence. Counts above are recorded event checks, not file summaries.</p>-->
 <?php if (!$presentation['files']): ?>
 <div class="scan-message">
 <?php if ($coverage && $coverage['outcome'] === 'completed'): ?>
@@ -31,28 +31,50 @@ $coverage = $presentation['coverage'];
 <details class="scan-file" <?= $file['failed'] > 0 || count($presentation['files']) === 1 ? 'open' : '' ?>>
 <summary><span class="scan-path"><?= $escape($file['path']) ?></span></summary>
 <div class="scan-file-content">
-<?php if ($file['summary']): ?>
+<?php $displayedCustomResults = []; ?>
+<?php if ($file['summary'] || !empty($file['custom_rules'])): ?>
 <table class="analysis-table file-check-summary"><thead><tr><th>Status</th><th>Check</th><th>Summary</th></tr></thead><tbody>
 <?php foreach ($file['summary'] as $summary): ?>
 <tr><td><span class="status <?= $escape(getStatusClass($summary['status'])) ?>"><i class="fas <?= $escape(getStatusIcon($summary['status'])) ?>"></i> <?= $escape($summary['status']) ?></span></td>
 <td><span class="check-name"><?= $escape($summary['name']) ?></span></td>
 <td><div class="detail-text"><?= $escape($summary['description']) ?></div>
-<div class="result-meta"><?php foreach (['FAIL','PASS','N/A'] as $status): ?><span class="meta-badge"><?= (int)$summary['counts'][$status] ?> <?= $escape($status) ?></span><?php endforeach; ?></div></td></tr>
+<div class="result-meta"><?php foreach (['FAIL','PASS','N/A'] as $status): ?><span class="meta-badge"><?= (int)$summary['counts'][$status] ?> <?= $escape($status) ?></span><?php endforeach; ?></div>
+<details class="check-reasons" style="margin-top:10px;">
+<summary style="cursor:pointer;color:#9acfff;padding:6px 0;">more details</summary>
+<?php foreach ($file['events'] as $event): foreach ($event['rows'] as $row):
+if (str_starts_with((string)($row['VulnerabilityName'] ?? ''),'[')) continue;
+$evidenceCheck = ($row['VulnerabilityName'] ?? '') === 'Log Context' ? 'Security Logging' : getCheckName($row);
+if ($evidenceCheck !== $summary['name']) continue;
+?>
+<div id="result-<?= (int)($row['ResultID'] ?? 0) ?>" style="padding:12px 0;border-top:1px solid #263b52;">
+<strong><?= $escape($event['name']) ?></strong> · <span class="status <?= $escape(getStatusClass($row['Status'])) ?>"><?= $escape($row['Status']) ?></span> · Line <?= (int)($row['LineNumber'] ?? $event['line']) ?>
+<p style="margin:8px 0;line-height:1.6;"><?= $escape(getDetail($row)) ?></p>
+<div class="result-meta"><?php foreach (['Standard'=>'','Severity'=>'Severity: ','RuleID'=>'Rule: '] as $field=>$label): if (!empty($row[$field])): ?><span class="meta-badge"><?= $escape($label.$row[$field]) ?></span><?php endif; endforeach; ?></div>
+</div>
+<?php endforeach; endforeach; ?>
+</details></td></tr>
+<?php endforeach; ?>
+<?php foreach (($file['custom_rules'] ?? []) as $custom):
+$matchingRows = array_filter($file['rows'], static fn($row) => (int)($row['RuleID'] ?? 0) === (int)($custom['id'] ?? -1)
+    && str_starts_with((string)($row['VulnerabilityName'] ?? ''),'['));
+foreach ($matchingRows as $matchedRow) $displayedCustomResults[(int)($matchedRow['ResultID'] ?? 0)] = true;
+$customStatus = $custom['status'] ?? 'Unknown';
+?>
+<tr class="custom-rule-inline" style="background:rgba(0,191,243,.055);">
+<td style="border-left:3px solid #00c9ed;"><span style="color:<?= $customStatus === 'Matched' ? '#ff8799' : '#a9bdd2' ?>;font-weight:600;"><?= $escape($customStatus) ?></span></td>
+<td><span class="check-name"><?= $escape($custom['name'] ?? '') ?></span>
+<span style="display:inline-block;border:1px solid #00c9ed;color:#55e4ff;border-radius:5px;padding:2px 6px;margin:6px 0;font-size:10px;">*NEW RULE</span>
+<div style="color:#9bb1c9;font-size:11px;overflow-wrap:anywhere;"><?= $escape($custom['code'] ?? '') ?></div></td>
+<td><div class="detail-text"><?= $escape($customStatus === 'Matched' ? 'Matching code was found. Review the evidence below.' : ($customStatus === 'No match' ? 'No matching code found for this custom rule. This is not a security PASS.' : 'This rule could not be evaluated. Review processing notes.')) ?></div>
+<div class="result-meta"><span class="meta-badge"><?= $escape($custom['standard'] ?? '') ?></span><span class="meta-badge"><?= $escape($custom['language'] ?? '') ?></span><span class="meta-badge"><?= (int)($custom['matches'] ?? 0) ?> matches</span></div>
+<details class="custom-rule-reasons" style="margin-top:10px;"><summary style="cursor:pointer;color:#9acfff;padding:6px 0;">more details</summary>
+<?php if (!$matchingRows): ?><p>No matched finding was saved for this rule. The label *NEW RULE identifies a custom rule, not its creation date.</p><?php endif; ?>
+<?php foreach ($matchingRows as $row): ?><div id="result-<?= (int)($row['ResultID'] ?? 0) ?>" style="padding:12px 0;border-top:1px solid #263b52;"><strong><?= $escape($row['Status']) ?></strong> · Line <?= (int)($row['LineNumber'] ?? 0) ?><p><?= $escape(getDetail($row)) ?></p></div><?php endforeach; ?>
+</details></td></tr>
 <?php endforeach; ?>
 </tbody></table>
 <?php endif; ?>
-<?php if (!empty($file['custom_rules'])): ?>
-<section class="custom-rule-results" style="margin:14px;border:1px solid #263b52;border-radius:8px;overflow:hidden;">
-<h4 style="margin:14px;color:#b9d5f2;">Custom rules used in this scan</h4>
-<p class="scan-guidance" style="margin:14px;">Active rules for the selected language. No match is not a security PASS.</p>
-<table class="analysis-table"><thead><tr><th>Result</th><th>Rule</th><th>Detail</th></tr></thead><tbody>
-<?php foreach ($file['custom_rules'] as $custom): ?>
-<tr><td><?= $escape($custom['status'] ?? 'Unknown') ?></td>
-<td><strong><?= $escape($custom['code'] ?? '') ?></strong><br><?= $escape($custom['name'] ?? '') ?></td>
-<td><?= (int) ($custom['matches'] ?? 0) ?> match(es)<div class="result-meta"><span class="meta-badge"><?= $escape($custom['standard'] ?? '') ?></span><span class="meta-badge"><?= $escape($custom['language'] ?? '') ?></span></div></td></tr>
-<?php endforeach; ?>
-</tbody></table></section>
-<?php else: ?>
+<?php if (empty($file['custom_rules'])): ?>
 <?php if (!empty($file['custom_rule_error'])): ?>
 <p class="scan-guidance" style="margin:14px;">Custom rules could not be loaded for this file. They were not evaluated.</p>
 <?php elseif (array_key_exists('custom_rules',$file)): ?>
@@ -61,31 +83,14 @@ $coverage = $presentation['coverage'];
 <p class="scan-guidance" style="margin:14px;">No per-file custom-rule evaluation record is available here. Scan Coverage identifies the files processed; rerun older scans to capture which active rules were evaluated.</p>
 <?php endif; ?>
 <?php endif; ?>
-<?php if ($file['rows']): ?>
-<details class="scan-event-details" style="margin:14px;border:1px solid #263b52;border-radius:8px;overflow:hidden;">
-<summary style="cursor:pointer;padding:12px;color:#9acfff;">View details · <?= count($file['rows']) ?> recorded checks / additional findings</summary>
-<p class="scan-guidance" style="padding:0 14px;">Original event results are retained below. Custom rules and historical extra checks are shown here separately from the four summaries.</p>
-<?php foreach ($file['events'] as $event): ?>
-<section class="scan-event-evidence" style="padding:0 10px 12px;">
-<h4 style="margin:14px 4px;color:#b9d5f2;font-size:13px;"><?= $escape($event['name']) ?> · Line <?= (int)$event['line'] ?></h4>
-<table class="analysis-table"><thead><tr><th>Status</th><th>Check</th><th>Detail</th></tr></thead><tbody>
-<?php foreach ($event['rows'] as $row): ?>
-<tr id="result-<?= (int) ($row['ResultID'] ?? 0) ?>">
-<td><span class="status <?= $escape(getStatusClass($row['Status'])) ?>"><i class="fas <?= $escape(getStatusIcon($row['Status'])) ?>"></i> <?= $escape($row['Status']) ?></span></td>
-<td><span class="check-name"><?= $escape(getCheckName($row)) ?></span></td>
-<td><div class="detail-text"><?= $escape(getDetail($row)) ?></div>
-<div class="result-meta">
-<?php foreach (['Standard' => '', 'Severity' => 'Severity: ', 'RuleID' => 'Rule: ', 'LineNumber' => 'Line: '] as $field => $label): ?>
-<?php if (!empty($row[$field])): ?><span class="meta-badge"><?= $escape($label . $row[$field]) ?></span><?php endif; ?>
-<?php endforeach; ?>
-</div></td></tr>
-<?php endforeach; ?>
-</tbody></table>
-
-</section>
-<?php endforeach; ?>
-</details>
-<?php endif; ?>
+<?php
+$additional = array_filter($file['rows'], static fn($row) => !isset($displayedCustomResults[(int)($row['ResultID'] ?? 0)]) && (str_starts_with((string)($row['VulnerabilityName'] ?? ''),'[')
+    || (!in_array(getCheckName($row),['Security Logging','Log Neutralization','Log Storage','Log Encryption'],true)
+        && ($row['VulnerabilityName'] ?? '') !== 'Log Context')));
+?>
+<?php if ($additional): ?><details style="margin:14px;"><summary>Additional finding details</summary>
+<?php foreach ($additional as $row): ?><div id="result-<?= (int)($row['ResultID'] ?? 0) ?>" style="padding:12px;border-bottom:1px solid #263b52;"><strong><?= $escape($row['VulnerabilityName']) ?></strong> · <?= $escape($row['Status']) ?> · Line <?= (int)($row['LineNumber'] ?? 0) ?><p><?= $escape(getDetail($row)) ?></p></div><?php endforeach; ?>
+</details><?php endif; ?>
 <?php foreach ($file['notes'] as $note): ?>
 <div class="scan-message"><strong>Processing note</strong><p><?= $escape($note['Description'] ?? '') ?></p></div>
 <?php endforeach; ?>
