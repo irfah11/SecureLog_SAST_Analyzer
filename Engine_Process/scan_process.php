@@ -2785,7 +2785,7 @@ foreach (
         $findings = array_merge($findings, $customFindings);
     }
 
-    if ($language === 'php' && $findings === []) {
+    if (in_array($language, ['php', 'java'], true) && $findings === []) {
         $analyzedFiles++;
         $coverageWithoutEvents[] = $fileName;
         $coverageFiles[$index]['status'] = 'no_events';
@@ -2876,7 +2876,7 @@ foreach (
     $coverageFiles[$index]['status'] = 'analyzed';
     $coverageFiles[$index]['reason'] = 'Analysis returned security checks.';
     $coverageFiles[$index]['checks'] = count($findings);
-    if ($language === 'php') {
+    if (in_array($language, ['php', 'java'], true)) {
         $coverageFiles[$index]['event_count'] = count(array_unique(array_filter(array_column($findings, 'event_key'), static fn($key) => !str_starts_with((string) $key, 'custom-rule-'))));
     }
 
@@ -3470,6 +3470,25 @@ $coverageOutcome = $analyzedFiles === 0 ? 'failed'
     : (($scannerErrors > 0 || $saveErrors > 0 || $validatedFiles < $totalSubmittedFiles) ? 'completed_with_issues' : 'completed');
 if (!securelogSaveCoverage($scanId, $currentUserId, $coverageFiles, $coverageEvents, $coverageOutcome)) {
     error_log('SecureLog coverage metadata could not be saved for scan ' . $scanId);
+}
+
+// Status describes processing, not the security of uploaded code. The current
+// schema supports Pending/Completed/Failed; partial-processing details remain
+// in Scan Coverage rather than inventing an unsupported enum value.
+$finalScanStatus = $analyzedFiles > 0 ? 'Completed' : 'Failed';
+try {
+    $statusStatement = $conn->prepare('UPDATE scans SET Status = ? WHERE ScanID = ? AND UserID = ? LIMIT 1');
+    if (!$statusStatement) throw new RuntimeException('Unable to prepare scan status update.');
+    try {
+        $statusStatement->bind_param('sii', $finalScanStatus, $scanId, $currentUserId);
+        if (!$statusStatement->execute()) throw new RuntimeException('Unable to save final scan status.');
+    } finally {
+        $statusStatement->close();
+    }
+} catch (Throwable $statusError) {
+    error_log('SecureLog final scan status update failed for scan ' . $scanId);
+    http_response_code(500);
+    exit('Scan results were processed, but the final scan status could not be saved. Review scan history before starting another scan.');
 }
 
 header(

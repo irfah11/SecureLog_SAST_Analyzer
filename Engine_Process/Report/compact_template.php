@@ -60,7 +60,7 @@ table.list { width:100%; table-layout:fixed; border-collapse:collapse; }
 <header class="header"><div class="eyebrow">SECURELOG / COMPACT REPORT</div>
 <h1><?= $esc($report['project']) ?></h1>
 <p class="muted">Scan #<?= (int) $report['id'] ?> · <?= $esc($report['language']) ?> · Scan date: <?= $esc($report['date']) ?></p>
-<p class="muted">Recorded status: <?= $esc($report['status']) ?> · Generated <?= $esc($report['generated']) ?></p></header>
+<p class="muted">Scan Status (recorded): <?= $esc($report['status']) ?> · Generated <?= $esc($report['generated']) ?></p></header>
 <table class="stats"><tr>
 <?php foreach (['FAIL' => 'Failed checks', 'PASS' => 'Passed checks', 'N/A' => 'N/A checks'] as $key => $label): ?>
 <td><strong><?= count($groups[$key]) ?></strong><span><?= $label ?></span></td>

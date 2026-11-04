@@ -2761,11 +2761,85 @@ function securelogPhpContextPayloads(string $body): array
 }
 
 /** Presence means statically recognized attributes, not verified runtime identities. */
+/** Resolve only supported expressions; @metadata is framing, never event context. */
+function securelogPhpContextOrigin(string $expression, array $states, int $depth = 0): ?string
+{
+    if ($depth > 12) return null;
+    $tokens = array_values(array_filter(securelogPhpTokens('<?php ' . trim($expression)),
+        static fn($t) => !in_array($t['id'],[T_OPEN_TAG,T_WHITESPACE,T_COMMENT,T_DOC_COMMENT],true)));
+    if (!$tokens) return null;
+    $last = count($tokens)-1;
+    if ($tokens[0]['text'] === '[' && securelogPhpMatchPair($tokens,0,'[',']') === $last) return trim($expression);
+    if (count($tokens) === 1) {
+        if ($tokens[0]['id'] === T_VARIABLE) return $states[$tokens[0]['text']] ?? null;
+        if ($tokens[0]['text'] === 'PHP_EOL') return '@metadata';
+        if ($tokens[0]['id'] === T_CONSTANT_ENCAPSED_STRING
+            && preg_match('/^(?:\s|\\\\[rn])*$/',substr($tokens[0]['text'],1,-1))) return '@metadata';
+    }
+    $nesting=0; $start=0; $parts=[];
+    foreach ($tokens as $i=>$token) {
+        if ($token['id'] !== null) continue;
+        if (in_array($token['text'],['(','[','{'],true)) $nesting++;
+        elseif (in_array($token['text'],[')',']','}'],true)) $nesting--;
+        elseif ($token['text']==='.' && $nesting===0) { $parts[]=securelogPhpSlice($tokens,$start,$i-1); $start=$i+1; }
+    }
+    if ($parts) {
+        $parts[]=securelogPhpSlice($tokens,$start,$last); $origins=[];
+        foreach ($parts as $part) {
+            $origin=securelogPhpContextOrigin($part,$states,$depth+1);
+            if ($origin===null) return null;
+            if ($origin!=='@metadata') $origins[]=$origin;
+        }
+        return count($origins)===1 ? $origins[0] : null;
+    }
+    if ($tokens[0]['id']===T_STRING && ($tokens[1]['text']??'')==='('
+        && securelogPhpMatchPair($tokens,1,'(',')')===$last) {
+        $name=strtolower($tokens[0]['text']); $args=securelogPhpCallArguments($tokens,1,$last);
+        if ($name==='random_bytes') return '@metadata';
+        if (in_array($name,['json_encode','base64_encode','bin2hex','sodium_crypto_secretbox','openssl_encrypt'],true)) {
+            return isset($args[0]) ? securelogPhpContextOrigin($args[0],$states,$depth+1) : null;
+        }
+    }
+    return null;
+}
+
+/** Capture origins at each sink, in order. Branches/mutations invalidate the proof. */
+function securelogPhpTraceContextPayloads(string $body): array
+{
+    $tokens=securelogPhpTokens('<?php ' . $body);
+    if (array_intersect(array_column($tokens,'id'),[T_IF,T_ELSEIF,T_SWITCH,T_FOR,T_FOREACH,T_WHILE,T_DO,T_TRY,T_MATCH,T_FUNCTION,T_UNSET,T_YIELD])) {
+        return securelogPhpContextPayloads($body);
+    }
+    $states=[]; $payloads=[]; $start=1; $nesting=0;
+    foreach ($tokens as $i=>$token) {
+        if ($token['id']!==null) continue;
+        if (in_array($token['text'],['(','[','{'],true)) $nesting++;
+        elseif (in_array($token['text'],[')',']','}'],true)) $nesting--;
+        if ($token['text']!==';' || $nesting!==0) continue;
+        $statement=securelogPhpSlice($tokens,$start,$i); $start=$i+1;
+        $clean='';
+        foreach (securelogPhpTokens('<?php '.$statement) as $t) if (!in_array($t['id'],[T_OPEN_TAG,T_COMMENT,T_DOC_COMMENT],true)) $clean.=$t['text'];
+        if (str_contains($clean,'&') || array_intersect(array_column(securelogPhpTokens('<?php '.$clean),'id'),[T_OBJECT_OPERATOR,T_NULLSAFE_OBJECT_OPERATOR,T_DOUBLE_COLON])) $states=[];
+        foreach (securelogPhpContextPayloads($clean) as $payload) {
+            $origin=securelogPhpContextOrigin($payload,$states);
+            $payloads[]=$origin!==null && $origin!=='@metadata' ? $origin : $payload;
+        }
+        $allowed=['date','gmdate','json_encode','random_bytes','base64_encode','bin2hex','sodium_crypto_secretbox','openssl_encrypt','file_put_contents','error_log','syslog'];
+        foreach (securelogPhpBuiltinCalls($clean) as $call) if (!in_array($call['name'],$allowed,true)) $states=[];
+        if (preg_match('/^\s*(\$[A-Za-z_]\w*)\s*=\s*(?![=>])([\s\S]+);\s*$/',$clean,$match)) {
+            $states[$match[1]]=securelogPhpContextOrigin($match[2],$states);
+        } elseif (preg_match('/\$[A-Za-z_]\w*\s*(?:\[|->|\+\+|--|\.=|\+=|-=|=&)/',$clean)) {
+            $states=[];
+        }
+    }
+    return $payloads ?: securelogPhpContextPayloads($body);
+}
+
 function securelogPhpAssessContext(array $event, array $sink): array
 {
     if ($sink['status'] !== 'PASS') return ['N/A', 'Context cannot be assessed until logging on the event path is verified.'];
     if (!empty($sink['indirect'])) return ['N/A', 'A logger wrapper was resolved, but argument binding and automatically added context are not verified. Include and review the logger implementation.'];
-    $payloads = securelogPhpContextPayloads($event['body']);
+    $payloads = securelogPhpTraceContextPayloads($event['body']);
     $observations = [];
     foreach ($payloads as $payload) {
         $payload = trim($payload);

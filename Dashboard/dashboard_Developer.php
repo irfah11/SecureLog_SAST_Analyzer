@@ -1111,7 +1111,7 @@ $severityDataJson = json_encode(
                                 <th>Project Name</th>
                                 <th>Failed checks</th>
                                 <th>Scan Date</th>
-                                <th>Status</th>
+                                <th>Scan Status</th>
                             </tr>
                         </thead>
 

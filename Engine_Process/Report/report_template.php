@@ -90,7 +90,7 @@ pre { background:#0b192b; padding:9px; font-family:"DejaVu Sans Mono",monospace;
 <table class="metadata">
 <?php foreach (['Project' => $report['project'], 'Scan ID' => $report['id'],
     'Language' => $report['language'], 'Scan date (recorded)' => $report['date'],
-    'Status (recorded)' => $report['status'], 'Files submitted' => $report['files'],
+    'Scan Status (recorded)' => $report['status'], 'Files submitted' => $report['files'],
     'Security checks recorded' => $report['total'], 'Scan processing notes' => count($groups['SYSTEM'])] as $label => $value): ?>
 <tr><td><?= $esc($label) ?></td><td><?= $esc($value) ?></td></tr>
 <?php endforeach; ?>
